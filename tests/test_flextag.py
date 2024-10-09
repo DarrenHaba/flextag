@@ -25,8 +25,13 @@ class TestFlexTagParser(unittest.TestCase):
         """
 
         self.expected_dict = {
-            "ai text response": "Here’s a basic Python class that prints \"Hello, World!\"",
-            "ai code response": "class HelloWorld:\ndef __init__(self):\nself.message = \"Hello, World!\"\n\ndef say_hello(self):\nprint(self.message)\n\n# Usage\nhello = HelloWorld()\nhello.say_hello()"
+            "ai text response": "Here’s a basic Python class that prints"
+            ' "Hello, World!"',
+            "ai code response": "class HelloWorld:\ndef __init__(self):\n"
+            'self.message = "Hello, World!"\n\n'
+            "def say_hello(self):\nprint(self.message)"
+            "\n\n# Usage\nhello = HelloWorld()\nhello."
+            "say_hello()",
         }
 
         self.expected_flex_tag = """
@@ -57,4 +62,6 @@ hello.say_hello()
 
 
 # Run the unit tests
-unittest.TextTestRunner().run(unittest.makeSuite(TestFlexTagParser))
+unittest.TextTestRunner().run(
+    unittest.TestLoader().loadTestsFromTestCase(TestFlexTagParser)
+)
