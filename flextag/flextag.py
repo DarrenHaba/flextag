@@ -1,6 +1,5 @@
 import re
 from collections import OrderedDict
-from pprint import pprint
 
 
 def flex_to_dict(flex_tag_string):
@@ -17,7 +16,7 @@ def flex_to_dict(flex_tag_string):
         line = line.strip()  # Remove any indentation
 
         # Check for opening tag
-        opening_tag_match = re.match(r'\[\[---- (.+) --', line)
+        opening_tag_match = re.match(r"\[\[---- (.+) --", line)
         if opening_tag_match:
             tag_name = opening_tag_match.group(1).strip()
             if current_tag:
@@ -28,7 +27,7 @@ def flex_to_dict(flex_tag_string):
             continue
 
         # Check for closing tag
-        if line == '--]]':
+        if line == "--]]":
             if tag_stack:
                 # If there is a nested tag, pop the parent tag from stack
                 parent_tag, parent_dict = tag_stack.pop()
@@ -43,7 +42,7 @@ def flex_to_dict(flex_tag_string):
         if current_tag:
             if current_tag not in tag_dict:
                 tag_dict[current_tag] = ""
-            tag_dict[current_tag] += line + '\n'
+            tag_dict[current_tag] += line + "\n"
 
     # Clean up any trailing newline characters in strings
     for key in tag_dict:
@@ -62,7 +61,7 @@ def dict_to_flex(tag_dict):
     def recursive_build_flex_tag(d, depth=0):
         nonlocal flex_tag_string
         for key, value in d.items():
-            indent = ' ' * (depth * 2)  # optional indentation based on depth
+            indent = " " * (depth * 2)  # optional indentation based on depth
             flex_tag_string += f"{indent}[[---- {key} --\n"
             if isinstance(value, dict):
                 recursive_build_flex_tag(value, depth + 1)  # Recurse into nested dict
@@ -72,33 +71,3 @@ def dict_to_flex(tag_dict):
 
     recursive_build_flex_tag(tag_dict)
     return flex_tag_string.strip()
-
-
-# # Test the functions with an example Flex Tag string
-# flex_tag_example = """
-# [[---- ai text response --
-# Here’s a basic Python class that prints "Hello, World!"
-# --]]
-# 
-# [[---- ai code response --
-# class HelloWorld:
-#     def __init__(self):
-#         self.message = "Hello, World!"
-# 
-#     def say_hello(self):
-#         print(self.message)
-# 
-# # Usage
-# hello = HelloWorld()
-# hello.say_hello()
-# --]]
-# """
-# 
-# # Retesting the parsing with the same example Flex Tag string
-# parsed_dict = flex_to_dict(flex_tag_example)
-# 
-# # Convert the dictionary back to Flex Tag
-# reconstructed_flex_tag = dict_to_flex(parsed_dict)
-# pprint(parsed_dict)
-# 
-# parsed_dict, reconstructed_flex_tag
