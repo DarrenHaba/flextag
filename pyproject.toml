@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "flextag"
+version = "0.1.0"
+description = "A simple parser for Flex Tag format"
+authors = ["DarrenHaba <darrenhaba@live.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.10.0"
+flake8 = "^7.1.1"
+pre-commit = "^4.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
