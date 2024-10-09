@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A simple parser for Flex Tag format"
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
+exclude = ["demo"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
