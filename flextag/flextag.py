@@ -67,7 +67,7 @@ def dict_to_flex(tag_dict):
                 recursive_build_flex_tag(value, depth + 1)  # Recurse into nested dict
             else:
                 flex_tag_string += f"{indent}{value}\n"
-            flex_tag_string += f"{indent}--]]\n"
+            flex_tag_string += f"{indent}--]]\n\n"
 
     recursive_build_flex_tag(tag_dict)
     return flex_tag_string.strip()
