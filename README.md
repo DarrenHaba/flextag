@@ -1,16 +1,15 @@
 # Flex Tag
 
-**A simple and flexible tagging system designed for AI responses**
+**A streamlined solution for handling complex AI responses**
 
-Flex Tag is a lightweight, developer-friendly system designed to separate different types of content—such as code and text—within AI-generated responses. It offers a simple, tag-based format that is ideal for processing structured data without conflicting with existing language syntax. Flex Tag can be used across different languages and formats, and it is designed to be flexible for a variety of parsing tasks.
+When working with Large Language Models (LLMs), developers often face a challenge: how to receive multiple pieces of information in a structured way. LLMs typically respond best to single prompts, but real-world applications often require more context, such as handling code, file locations, and descriptions all in one response. Flex Tag solves this problem by offering a consistent tagging system that lets you receive structured responses containing multiple sections—like text, code, or file references—all parsed into a clean, usable format.
 
 ---
 
 ### Why Use Flex Tag?
 
-Flex Tag is designed for developers who need to handle responses from AI models, especially when these responses include mixed content, like text and code. With Flex Tag, developers can easily parse AI responses into dictionaries, convert them back into structured tags, and ensure clean separation between different content types. This makes it easier to work with complex AI outputs, offering flexibility without compromising simplicity.
+Flex Tag gives you a simple, reliable way to interact with LLMs across different use cases. Whether you need multiple responses in one request or want to ensure the response is split into distinct sections, Flex Tag makes it easy. It converts AI responses into structured Python dictionaries, so you can quickly access and utilize each part of the response—whether it's code, instructions, or references. The tags give you control, making AI interactions more predictable and structured, eliminating the hassle of handling mixed-content responses manually.
 
----
 
 
 ### Quick Start
