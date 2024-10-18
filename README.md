@@ -33,6 +33,12 @@ Flex Tag bridges the gap between unstructured AI outputs and the structured data
 - [Flex Tag System Standards](#standards)
 - [Collaboration and Feedback](#feedback)
 
+
+## Links
+
+- [Project Repository](https://github.com/DarrenHaba/flextag)
+- [Issue Tracker](https://github.com/DarrenHaba/flextag/issues)
+
 ---
 
 <a id="installation"></a>
