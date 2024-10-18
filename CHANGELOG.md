@@ -7,3 +7,9 @@
 
 ### Fixed
 - Anchor links in documentation that led to wrong sections.
+
+
+## [0.2.2] - 2024-10-17
+### Added
+- Added links to documentation. 
+- Updated documentation to fix anchor issues in the README.
