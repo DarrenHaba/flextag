@@ -94,8 +94,10 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
 
 3. **Step 3: Parsing the Response**
 
-   Now, let's create a Python script that converts the example Flex Tag response from Step 2 into a dictionary. After converting, we'll print out both the `text` and `python code` sections.
+   - Before we begin, ensure you have Flex Tag installed. If you haven't installed it yet, refer to the [Installation](#installation) section above.
 
+   - Now, let's create a Python script that converts the example Flex Tag response from Step 2 into a dictionary. After converting, we'll print out both the `text` and `python code` sections.
+   
    **Example Script**:
 
    ```python
