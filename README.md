@@ -1,148 +1,427 @@
 # Flex Tag
 
-**A streamlined solution for handling complex AI responses**
+**A streamlined solution for structuring and parsing complex AI responses**
 
-When working with Large Language Models (LLMs), developers often face a challenge: how to receive multiple pieces of information in a structured way. LLMs typically respond best to single prompts, but real-world applications often require more context, such as handling code, file locations, and descriptions all in one response. Flex Tag solves this problem by offering a consistent tagging system that lets you receive structured responses containing multiple sections—like text, code, or file references—all parsed into a clean, usable format.
+Flex Tag is a Python package (still in bata) that provides a simple, reliable way to structure and parse complex responses from Large Language Models (LLMs) and other AI systems. It offers a flexible tagging system that allows for the organization of multiple types of content within a single response, including:
+
+- Plain text responses
+- Code snippets in various languages
+- File locations or references
+- Structured data (like JSON or YAML)
+- Descriptions or metadata
+- And more
+
+Key features:
+
+1. **API-friendly**: Designed to work seamlessly with AI APIs, allowing for structured responses that are easy to parse programmatically.
+2. **Human-readable**: The Flex Tag format is intuitive and easy to read, making it suitable for both machine and human consumption.
+3. **Multi-response handling**: Capable of organizing multiple distinct pieces of information within a single response, solving the challenge of getting varied content from a single API call.
+4. **Language-agnostic**: While implemented in Python, the Flex Tag format itself is language-independent, making it adaptable to various programming environments.
+5. **Customizable**: Users can define their own tags to suit specific use cases, providing flexibility for diverse applications.
+
+Flex Tag bridges the gap between unstructured AI outputs and the structured data often required in practical applications, making it easier to integrate AI responses into existing workflows and systems.
 
 ---
 
-### Why Use Flex Tag?
+## Contents
 
-Flex Tag gives you a simple, reliable way to interact with LLMs across different use cases. Whether you need multiple responses in one request or want to ensure the response is split into distinct sections, Flex Tag makes it easy. It converts AI responses into structured Python dictionaries, so you can quickly access and utilize each part of the response—whether it's code, instructions, or references. The tags give you control, making AI interactions more predictable and structured, eliminating the hassle of handling mixed-content responses manually.
+- [Installation](#installation)
+- [Quick Start Example ](#quick-start)
+- [API Integration Example ](#chatgpt-example)
+- [API Reference](#api-reference)
+- [Converting to Other Formats](#converting)
+- [Flex Tag System Standards](#standards)
+- [Collaboration and Feedback](#feedback)
 
+---
 
+## Installation<a id="installation"></a>
 
-### Quick Start
-
-#### 1. **Installation**
-
-To install Flex Tag, use the following command:
-
-```bash
+``` bash
 pip install flextag
 ```
 
-#### 2. **How to Use Flex Tag with an LLM**
+This will download and install the latest version of Flex Tag and its dependencies.
 
-When working with LLMs, you can instruct the AI to respond with specific tags that you define. These tags can be customized for your needs. For instance, in this case, we use:
-- `text` to describe the code or explain the response.
-- `code` to contain the actual code.
+For development purposes, you can install Flex Tag directly from the GitHub repository:
 
-This prompt can be sent as the first message in an API request or it can be used directly in a ChatGPT-like interface **for demo purposes**. The primary purpose of Flex Tag is to facilitate interactions when using an API to communicate with LLMs.
-
-Simply paste the prompt below, and you should receive a response formatted in Flex Tag, as shown in the example below.
-
-**Here is the sample prompt to send to the LLM**:
-
-```
-Please respond in Flex Tag format.
-
-Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
-
-- Tags are written in lowercase.
-- Opening tags start with `[[---- `followed by the tag name and end with` --`.
-- Closing tags start with `--]]`.
-
-Please respond in Flex Tag format and ensure you use ```flextag``` to enclose the response.
-
-Please use the following tags:
-- `text` for text responses.
-- `code` for code responses.
-
-Provide a brief text description and a Python code example that prints "Hello, World!" in one line.
+``` bash
+pip install git+https://github.com/darrenhaba/flextag.git
 ```
 
-You can use this prompt in any ChatGPT window **for demo purposes**, or in an API request where interacting with an LLM, and it will generate a response similar to the one shown below.
+After installation, you can import Flex Tag in your Python scripts as shown in the examples below.
 
-#### 3. **Example Response**
+---
 
-After sending the above request, the LLM should respond with something similar, wrapped in Flex Tag format:
+## Quick Start: LLM Chat Example<a id="quick-start"></a>
 
-```flextag
-[[---- text --
-This is a simple Python script that prints "Hello, World!" to the console.
---]]
+1. **Step 1: Instructing the LLM**
 
-[[---- code --
-print("Hello, World!")
---]]
+   You can start by pasting the following prompt into your LLM chat to instruct it to respond using Flex Tag format. The response will include a brief description and a simple Python code example.
+
+   **Paste this prompt**:
+
+   ```
+   Please respond in Flex Tag format.
+   
+   Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
+   
+   - Tags are written in lowercase, with spaces between words.
+   - Opening tags start with `[[-- ` followed by the tag name.
+   - Closing tags are `--]]`.
+   - Opening and closing tags must be on separate lines, no inline tags allowed.
+   
+   Please use the following tags:
+   - `text` for text responses.
+   - `python code` for python code responses.
+   
+   Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
+   ```
+
+2. **Step 2: Example LLM Response**
+
+   After pasting the above instructions, you should receive a response similar to this:
+
+   ```flextag
+   [[-- text
+   Here is a simple Python script.
+   --]]
+
+   [[-- python code
+   print("Hello, World!")
+   --]]
+   ```
+
+3. **Step 3: Parsing the Response**
+
+   Now, let's create a Python script that converts the example Flex Tag response from Step 2 into a dictionary. After converting, we'll print out both the `text` and `python code` sections.
+
+   **Example Script**:
+
+   ```python
+   import flextag
+   
+   print("Welcome to the FlexTag Demo!")
+   print("This demo will show you how to parse a FlexTag-formatted string into a dictionary.\n")
+   
+   print("Step 1: Here's our example FlexTag-formatted string:")
+   # Example Flex Tag response
+   flex_response = '''
+   [[-- text
+   Here is a simple Python script.
+   --]]
+   
+   [[-- python code
+   print("Hello, World!")
+   --]]
+   '''
+   print(flex_response)
+   
+   print("\nStep 2: Now, let's convert this FlexTag string to a dictionary and see its contents:")
+   # Convert Flex Tag to dictionary
+   flex_dict = flextag.flex_to_dict(flex_response)
+   
+   # Print the text and python code sections from the dictionary
+   print("Text content:", flex_dict.get('text', 'No text response available'))
+   print("Python code content:", flex_dict.get('python code', 'No code response available'))
+   
+   print("\nThat's it! We've successfully parsed a FlexTag string into a dictionary.")
+   print("You can now easily access different parts of the response using dictionary keys.")   
+   ```
+
+   In this script:
+   - `flex_response` is the Flex Tag formatted response we received from the LLM in Step 2.
+   - The `flex_to_dict` function converts the Flex Tag response into a Python dictionary.
+   - Each section of the response is accessible by its tag (e.g., `text`, `python code`) as dictionary keys.
+
+    This script demonstrates how to parse a Flex Tag formatted string into a dictionary and access its contents. It provides a step-by-step walkthrough of the process, making it easy for users to understand how Flex Tag works.
+
+## API Integration: ChatGPT Example<a id="chatgpt-example"></a>
+
+1. **Step 1: Set Up the API Key**
+   - Make sure you have your OpenAI API key. You can get one by signing up at [OpenAI](https://beta.openai.com/signup/).
+
+2. **Step 2: Install Required Packages**
+   - You'll need the `openai` Python package to interact with the ChatGPT API:
+   - You'll need the `flextag` Python package to parse and organize multiple responses from the LLM, converting them into a structured dictionary format for easier handling.
+   
+  ```bash
+  pip install openai flextag
+  ```
+
+3. **Step 3: Example API Script**
+   - Use the following Python script to interact with the ChatGPT API. This script sends a request for a response in Flex Tag format and converts the response into a Python dictionary.
+
+   ```python
+   import os
+
+   import openai
+   import flextag
+   
+   # Set your API key
+   os.environ['OPENAI_API_KEY'] = 'your-openai-api-key'
+
+   # Initialize the OpenAI client
+   client = openai.OpenAI()
+   
+   print("1. Preparing the request to the language model...")
+   # Example request to GPT-4 with updated Flex Tag format
+   response = client.chat.completions.create(
+   model="gpt-4",
+   messages=[
+   {"role": "system", "content": "You are a helpful assistant that responds in Flex Tag format."},
+   {"role": "user", "content": """
+   Please respond in Flex Tag format.
+   
+   Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
+   
+   - Tags are written in lowercase, with spaces between words.
+     - Opening tags start with `[[-- ` followed by the tag name.
+     - Closing tags are `--]]`.
+     - Opening and closing tags must be on separate lines, no inline tags allowed.
+   
+   Please use the following tags:
+   - `text` for text responses.
+     - `python code` for python code responses.
+   
+   Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
+   """}
+   ],
+   max_tokens=300,
+   temperature=0.7
+   )
+   
+   print("2. Received response from the language model.")
+   
+   # Get the text part of the response
+   flex_response = response.choices[0].message.content.strip()
+   print("\n3. Raw Flex Tag response:")
+   print(flex_response)
+   
+   print("\n4. Converting Flex Tag response to a dictionary...")
+   # Convert the Flex Tag response to a dictionary
+   flex_dict = flextag.flex_to_dict(flex_response)
+   
+   print("\n5. Flex Tag response converted to dictionary:")
+   print(flex_dict)
+   
+   # Print the text and code sections
+   print("\n6. Accessing specific sections from the response:")
+   print("Text:", flex_dict.get('text', 'No text response available'))
+   print("Python Code:", flex_dict.get('python code', 'No code response available'))
+   
+   print("\n7. Demo complete. Flextag successfully parsed the LLM response into separate sections.")
+   ```
+
+4. **Step 4: Running the Script**
+   - After running the script, you should see the Flex Tag response from ChatGPT, parsed into a Python dictionary with the text and code sections printed.
+
+# API Reference<a id="api-reference"></a> 
+
+## Functions
+
+### flex_to_dict
+
+```python
+def flex_to_dict(flex_tag_string: str) -> OrderedDict:
 ```
 
-#### 4. **Converting Flex Tag to a Dictionary**
+Converts a Flex Tag formatted string into an OrderedDict.
 
-Now let's convert the Flex Tag response into a Python dictionary:
+#### Parameters
+
+- `flex_tag_string` (str): A string in Flex Tag format.
+
+#### Returns
+
+- `OrderedDict`: A dictionary representation of the Flex Tag content.
+
+#### Example
 
 ```python
 import flextag
 
-flex_tag_string = '''
-[[---- description --
-This is a simple Python script that prints "Hello, World!" to the console.
+flex_string = """
+[[-- text
+Hello, World!
 --]]
 
-[[---- python code --
+[[-- python code
 print("Hello, World!")
 --]]
-'''
+"""
 
-flex_tag_dict = flextag.flex_to_dict(flex_tag_string)
-print(flex_tag_dict)
+result = flextag.flex_to_dict(flex_string)
+print(result)
+# Output: OrderedDict([('text', 'Hello, World!'), ('python code', 'print("Hello, World!")')])
 ```
 
-This will output a dictionary like this:
+### dict_to_flex
 
 ```python
-{
-    "description": "This is a simple Python script that prints 'Hello, World!' to the console.",
-    "python code": "print('Hello, World!')"
-}
+def dict_to_flex(tag_dict: Union[OrderedDict, dict]) -> str:
 ```
 
-#### 5. **Converting the Dictionary Back to Flex Tag**
+Converts a nested OrderedDict or dict back into a Flex Tag formatted string.
 
-You can also convert the dictionary back to Flex Tag format:
+#### Parameters
+
+- `tag_dict` (Union[OrderedDict, dict]): A dictionary representation of Flex Tag content.
+
+#### Returns
+
+- `str`: A Flex Tag formatted string.
+
+#### Example
 
 ```python
-flex_tag_dict = {
-    "description": "This is a simple Python script that prints 'Hello, World!' to the console.",
-    "python code": "print('Hello, World!')"
-}
+import flextag
+from collections import OrderedDict
 
-flex_tag_string = flextag.dict_to_flex(flex_tag_dict)
-print(flex_tag_string)
+tag_dict = OrderedDict([
+    ('text', 'Hello, World!'),
+    ('python code', 'print("Hello, World!")')
+])
+
+flex_string = flextag.dict_to_flex(tag_dict)
+print(flex_string)
+# Output:
+# [[-- text
+# Hello, World!
+# --]]
+#
+# [[-- python code
+# print("Hello, World!")
+# --]]
 ```
 
-The output will return the original Flex Tag format:
+### flex_to_json
 
-```flextag
-[[---- description --
-This is a simple Python script that prints 'Hello, World!' to the console.
---]]
-
-[[---- python code --
-print('Hello, World!')
---]]
+```python
+def flex_to_json(flex_tag_string: str, indent: Optional[int] = None) -> str:
 ```
+
+Converts a Flex Tag formatted string to a JSON string.
+
+#### Parameters
+
+- `flex_tag_string` (str): A string in Flex Tag format.
+- `indent` (Optional[int]): Number of spaces for indentation in the resulting JSON string. If None, the JSON will be compact. Defaults to None.
+
+#### Returns
+
+- `str`: A JSON formatted string representing the input Flex Tag structure.
+
+#### Example
+
+```python
+import flextag
+
+flex_string = """
+[[-- text
+Hello, World!
+--]]
+
+[[-- python code
+print("Hello, World!")
+--]]
+"""
+
+json_string = flextag.flex_to_json(flex_string, indent=2)
+print(json_string)
+# Output:
+# {
+#   "text": "Hello, World!",
+#   "python code": "print(\"Hello, World!\")"
+# }
+```
+
+### json_to_flex
+
+```python
+def json_to_flex(json_string: str) -> str:
+```
+
+Converts a JSON string to a Flex Tag formatted string.
+
+#### Parameters
+
+- `json_string` (str): A JSON formatted string.
+
+#### Returns
+
+- `str`: A Flex Tag formatted string representing the input JSON structure.
+
+#### Example
+
+```python
+import flextag
+
+json_string = '{"text": "Hello, World!", "python code": "print(\\"Hello, World!\\")"}'
+
+flex_string = flextag.json_to_flex(json_string)
+print(flex_string)
+# Output:
+# [[-- text
+# Hello, World!
+# --]]
+#
+# [[-- python code
+# print("Hello, World!")
+# --]]
+```
+
+## Converting to Other Formats<a id="converting"></a>
+
+Flex Tag directly supports conversion to and from JSON format using the `flex_to_json` and `json_to_flex` functions. For other formats like YAML or TOML, you can easily convert the resulting dictionary using third-party packages.
+
+### YAML Example (requires `pyyaml`):
+```python
+import yaml
+import flextag
+
+flex_string = "... your Flex Tag string ..."
+flex_dict = flextag.flex_to_dict(flex_string)
+yaml_string = yaml.dump(flex_dict)
+```
+
+### TOML Example (requires `toml`):
+```python
+import toml
+import flextag
+
+flex_string = "... your Flex Tag string ..."
+flex_dict = flextag.flex_to_dict(flex_string)
+toml_string = toml.dumps(flex_dict)
+```
+
+Note: For YAML and TOML conversions, you'll need to install the respective packages (`pyyaml` for YAML and `toml` for TOML) as they are not part of the Python standard library.
 
 ---
 
-### Flex Tag System Standards
+## Flex Tag System Standards<a id="standards"></a>
 
-**Flex Tag** is designed to be a flexible yet unique tagging system, using opening and closing tags that are distinct from any other tags used in common scripting or programming languages. This ensures that Flex Tag's tags are never confused with language-specific syntax, preventing interference when AI generates code.
-
----
+**Flex Tag** is designed to be a flexible yet unique tagging system, using tags that are distinct from any other tags used in common scripting or programming languages. This ensures that Flex Tag's tags are never confused with language-specific syntax, preventing interference when AI generates code.
 
 ### Standards
 
 #### 1. Tag Names
 - Tags should be written in **lowercase**, with **spaces encouraged** for simplicity.
-- The system is **case-insensitive**.
+- The system is **case-insensitive**, but **lowercase preferred**.
 - **Spaces**, **underscores**, and **dashes** are allowed, but **spaces are preferred**.
 
 #### 2. Tag Structure
-- **Opening tags**: `[[---- tag name --` must appear on a new line.
+- **Opening tags**: `[[-- tag name` must appear on a new line.
 - **Closing tags**: `--]]` must also appear on a new line.
 - Opening and closing tags should be the only content on their respective lines.
 
 #### 3. Multi-Language Support
 - Flex Tag can be used across multiple programming languages, allowing it to work without conflicting with existing language syntax.
+
+## Collaboration and Feedback<a id="feedback"></a>
+
+Flex Tag is currently in early beta, and we value your input to help shape its development. Whether you have suggestions for syntax improvements, feature requests, or unique use cases that could benefit from Flex Tag, we encourage you to participate in the project's evolution.
+
+If you encounter any issues, have ideas for enhancements, or want to discuss potential applications, please open a GitHub Issue on our repository. Your feedback is crucial in refining Flex Tag to meet a wide range of needs in the AI and data processing communities.
+
+We're committed to creating a tool that's both powerful and user-friendly, and your experiences and insights are invaluable in achieving this goal. Join us in developing Flex Tag into a robust solution for structured AI responses and data handling.
