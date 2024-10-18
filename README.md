@@ -42,6 +42,7 @@ Flex Tag bridges the gap between unstructured AI outputs and the structured data
 ---
 
 <a id="installation"></a>
+
 ## Installation
 
 ``` bash
@@ -61,6 +62,7 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
 ---
 
 <a id="quick-start"></a>
+
 ## Quick Start: LLM Chat Example
 
 1. **Step 1: Instructing the LLM**
@@ -147,6 +149,7 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
     This script demonstrates how to parse a Flex Tag formatted string into a dictionary and access its contents. It provides a step-by-step walkthrough of the process, making it easy for users to understand how Flex Tag works.
 
 <a id="chatgpt-example"></a>
+
 ## API Integration: ChatGPT Example
 
 1. **Step 1: Set Up the API Key**
@@ -231,6 +234,7 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
    - After running the script, you should see the Flex Tag response from ChatGPT, parsed into a Python dictionary with the text and code sections printed.
 
 <a id="api-reference"></a>
+
 # API Reference
 
 ## Functions
@@ -387,6 +391,7 @@ print(flex_string)
 ```
 
 <a id="converting"></a>
+
 ## Converting to Other Formats
 
 Flex Tag directly supports conversion to and from JSON format using the `flex_to_json` and `json_to_flex` functions. For other formats like YAML or TOML, you can easily convert the resulting dictionary using third-party packages.
@@ -416,6 +421,7 @@ Note: For YAML and TOML conversions, you'll need to install the respective packa
 ---
 
 <a id="standards"></a>
+
 ## Flex Tag System Standards
 
 **Flex Tag** is designed to be a flexible yet unique tagging system, using tags that are distinct from any other tags used in common scripting or programming languages. This ensures that Flex Tag's tags are never confused with language-specific syntax, preventing interference when AI generates code.
@@ -436,6 +442,7 @@ Note: For YAML and TOML conversions, you'll need to install the respective packa
 - Flex Tag can be used across multiple programming languages, allowing it to work without conflicting with existing language syntax.
 
 <a id="feedback"></a>
+
 ## Collaboration and Feedback
 
 Flex Tag is currently in early beta, and we value your input to help shape its development. Whether you have suggestions for syntax improvements, feature requests, or unique use cases that could benefit from Flex Tag, we encourage you to participate in the project's evolution.
