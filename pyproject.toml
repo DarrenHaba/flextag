@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flextag"
-version = "0.1.2"
+version = "0.2.0"
 description = "A simple parser for Flex Tag format"
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
