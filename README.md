@@ -195,7 +195,7 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
    temperature=0.7
    )
    
-   print("2. Received response from the language model.")
+   print("\n2. Received response from the language model.")
    
    # Get the text part of the response
    flex_response = response.choices[0].message.content.strip()
@@ -215,6 +215,7 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
    print("Python Code:", flex_dict.get('python code', 'No code response available'))
    
    print("\n7. Demo complete. Flextag successfully parsed the LLM response into separate sections.")
+   
    ```
 
 4. **Step 4: Running the Script**
