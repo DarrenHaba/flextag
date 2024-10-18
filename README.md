@@ -35,7 +35,8 @@ Flex Tag bridges the gap between unstructured AI outputs and the structured data
 
 ---
 
-## Installation<a id="installation"></a>
+<a id="installation"></a>
+## Installation
 
 ``` bash
 pip install flextag
@@ -53,7 +54,8 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
 
 ---
 
-## Quick Start: LLM Chat Example<a id="quick-start"></a>
+<a id="quick-start"></a>
+## Quick Start: LLM Chat Example
 
 1. **Step 1: Instructing the LLM**
 
@@ -138,7 +140,8 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
 
     This script demonstrates how to parse a Flex Tag formatted string into a dictionary and access its contents. It provides a step-by-step walkthrough of the process, making it easy for users to understand how Flex Tag works.
 
-## API Integration: ChatGPT Example<a id="chatgpt-example"></a>
+<a id="chatgpt-example"></a>
+## API Integration: ChatGPT Example
 
 1. **Step 1: Set Up the API Key**
    - Make sure you have your OpenAI API key. You can get one by signing up at [OpenAI](https://beta.openai.com/signup/).
@@ -221,7 +224,8 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
 4. **Step 4: Running the Script**
    - After running the script, you should see the Flex Tag response from ChatGPT, parsed into a Python dictionary with the text and code sections printed.
 
-# API Reference<a id="api-reference"></a> 
+<a id="api-reference"></a>
+# API Reference
 
 ## Functions
 
@@ -376,7 +380,8 @@ print(flex_string)
 # --]]
 ```
 
-## Converting to Other Formats<a id="converting"></a>
+<a id="converting"></a>
+## Converting to Other Formats
 
 Flex Tag directly supports conversion to and from JSON format using the `flex_to_json` and `json_to_flex` functions. For other formats like YAML or TOML, you can easily convert the resulting dictionary using third-party packages.
 
@@ -404,7 +409,8 @@ Note: For YAML and TOML conversions, you'll need to install the respective packa
 
 ---
 
-## Flex Tag System Standards<a id="standards"></a>
+<a id="standards"></a>
+## Flex Tag System Standards
 
 **Flex Tag** is designed to be a flexible yet unique tagging system, using tags that are distinct from any other tags used in common scripting or programming languages. This ensures that Flex Tag's tags are never confused with language-specific syntax, preventing interference when AI generates code.
 
@@ -423,7 +429,8 @@ Note: For YAML and TOML conversions, you'll need to install the respective packa
 #### 3. Multi-Language Support
 - Flex Tag can be used across multiple programming languages, allowing it to work without conflicting with existing language syntax.
 
-## Collaboration and Feedback<a id="feedback"></a>
+<a id="feedback"></a>
+## Collaboration and Feedback
 
 Flex Tag is currently in early beta, and we value your input to help shape its development. Whether you have suggestions for syntax improvements, feature requests, or unique use cases that could benefit from Flex Tag, we encourage you to participate in the project's evolution.
 
