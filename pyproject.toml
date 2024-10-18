@@ -1,15 +1,12 @@
 [tool.poetry]
 name = "flextag"
-version = "0.2.1"
-description = "A simple parser for Flex Tag format"
+version = "0.2.2"
+description = "Python package for structuring and parsing complex AI responses using a flexible tagging system."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
-exclude = ["demo"]
-exclude = ["dev"]
-description = "Python package for structuring and parsing complex AI responses using a flexible tagging system."
+exclude = ["demo", "dev"]
 repository = "https://github.com/DarrenHaba/flextag"
 homepage = "https://github.com/DarrenHaba/flextag"
-issues = "https://github.com/DarrenHaba/flextag/issues"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
