@@ -173,20 +173,22 @@ After installation, you can import Flex Tag in your Python scripts as shown in t
    messages=[
    {"role": "system", "content": "You are a helpful assistant that responds in Flex Tag format."},
    {"role": "user", "content": """
-   Please respond in Flex Tag format.
-   
-   Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
-   
-   - Tags are written in lowercase, with spaces between words.
-     - Opening tags start with `[[-- ` followed by the tag name.
-     - Closing tags are `--]]`.
-     - Opening and closing tags must be on separate lines, no inline tags allowed.
-   
-   Please use the following tags:
-   - `text` for text responses.
-     - `python code` for python code responses.
-   
-   Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
+    Please respond in Flex Tag format.
+
+    Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
+
+    - Tags are written in lowercase, with spaces between words.
+       - Opening tags start on a new line `[[-- tag name here`.
+       - The content goes is between the opening and closing tags.
+       - closing tags start on a new line `--]]`.
+   - Add an empty line between end tags and the next start tag.
+
+
+    Please use the following tags:
+    - `text` for text responses.
+    - `python code` for python code responses.
+
+    Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
    """}
    ],
    max_tokens=300,
