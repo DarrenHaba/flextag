@@ -1,12 +1,33 @@
 """
-This is the __init__.py file for the flextag package.
-
-It imports core functions for parsing and generating Flex Tag format.
+FlexTag - A flexible tag-based markup format parser and serializer.
 """
 
-from .flextag import (  # noqa: F401
-    flex_to_dict,
-    dict_to_flex,
-    flex_to_json,
-    json_to_flex,
+from .parser import parse
+from .serializer import dumps
+from .json import to_json, from_json
+from .exceptions import (
+    FlexTagError,
+    ParseError,
+    SerializationError,
+    ValidationError,
+    WrapperError,
+    TagError,
+    StructureError,
 )
+
+__version__ = "0.3.0"
+__all__ = [
+    # Main functions
+    "parse",
+    "dumps",
+    "to_json",
+    "from_json",
+    # Exceptions
+    "FlexTagError",
+    "ParseError",
+    "SerializationError",
+    "ValidationError",
+    "WrapperError",
+    "TagError",
+    "StructureError",
+]

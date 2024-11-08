@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flextag"
-version = "0.2.2"
+version = "0.3.0"
 description = "Python package for structuring and parsing complex AI responses using a flexible tagging system."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
@@ -10,12 +10,14 @@ homepage = "https://github.com/DarrenHaba/flextag"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
+pytest-cov = "^6.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.10.0"
 flake8 = "^7.1.1"
 pre-commit = "^4.0.1"
 flake8-docstrings = "^1.7.0"
+openai = "^1.52.2"
 
 [build-system]
 requires = ["poetry-core"]
