@@ -1,33 +1,24 @@
-"""
-FlexTag - A flexible tag-based markup format parser and serializer.
-"""
+from .core.impl.section import Section
+from .core.impl.document import Document
+from .core.impl.parser import FlexTagParser
+from .core.factory import FlexTagFactory
+from .settings import Const
+from .logger import logger
 
-from .parser import parse
-from .serializer import dumps
-from .json import to_json, from_json
-from .exceptions import (
-    FlexTagError,
-    ParseError,
-    SerializationError,
-    ValidationError,
-    WrapperError,
-    TagError,
-    StructureError,
+# Create default factory instance
+factory = FlexTagFactory(
+    section_cls=Section, document_cls=Document, parser_cls=FlexTagParser
 )
 
-__version__ = "0.3.0"
+# Export commonly used classes and instances
 __all__ = [
-    # Main functions
-    "parse",
-    "dumps",
-    "to_json",
-    "from_json",
-    # Exceptions
-    "FlexTagError",
-    "ParseError",
-    "SerializationError",
-    "ValidationError",
-    "WrapperError",
-    "TagError",
-    "StructureError",
+    "Section",
+    "Document",
+    "FlexTagParser",
+    "FlexTagFactory",
+    "factory",
+    "Const",
+    "logger",
 ]
+
+__version__ = "0.3.0"
