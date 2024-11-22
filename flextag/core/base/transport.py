@@ -2,6 +2,8 @@ from abc import ABC
 from typing import Dict, Any
 import json
 import base64
+
+from ..compression import CompressionRegistry
 from ..interfaces.transport import ITransportContainer
 from ..interfaces.container import IContainer
 from flextag.exceptions import TransportError
@@ -44,8 +46,12 @@ class BaseTransportContainer(ABC, ITransportContainer):
         try:
             # Apply compression if specified
             if self.metadata["compression"]:
-                # Add compression logic here
-                pass
+                try:
+                    compressor = CompressionRegistry.get_compressor(self.metadata["compression"])
+                    data = compressor.compress(data)
+                except Exception as e:
+                    logger.error(f"Compression error: {str(e)}")
+                    raise TransportError(f"Compression failed: {str(e)}")
 
             # Apply encryption if specified
             if self.metadata["encryption"]:
@@ -71,8 +77,12 @@ class BaseTransportContainer(ABC, ITransportContainer):
 
             # Apply decompression if specified
             if self.metadata["compression"]:
-                # Add decompression logic here
-                pass
+                try:
+                    compressor = CompressionRegistry.get_compressor(self.metadata["compression"])
+                    decoded = compressor.decompress(decoded)
+                except Exception as e:
+                    logger.error(f"Decompression error: {str(e)}")
+                    raise TransportError(f"Decompression failed: {str(e)}")
 
             return decoded
         except Exception as e:
