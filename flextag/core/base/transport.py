@@ -3,12 +3,10 @@ from typing import Dict, Any
 import json
 import base64
 
-from ..compression import CompressionRegistry
+from ..compression.registry import CompressionRegistry
 from ..interfaces.transport import ITransportContainer
-from ..interfaces.container import IContainer
-from flextag.exceptions import TransportError
-from flextag.logger import logger
-from flextag.settings import Const
+from ...exceptions import TransportError
+from ...logger import logger
 
 
 class BaseTransportContainer(ABC, ITransportContainer):
@@ -44,47 +42,45 @@ class BaseTransportContainer(ABC, ITransportContainer):
     def _encode_data(self, data: str) -> str:
         """Encode data with optional compression and encryption"""
         try:
+            # Start with string data
+            current_data = data.encode()  # Convert to bytes first
+    
             # Apply compression if specified
             if self.metadata["compression"]:
                 try:
-                    compressor = CompressionRegistry.get_compressor(self.metadata["compression"])
-                    data = compressor.compress(data)
+                    compressor = CompressionRegistry.get(self.metadata["compression"])
+                    current_data = compressor.compress(data)  # Returns bytes
                 except Exception as e:
                     logger.error(f"Compression error: {str(e)}")
                     raise TransportError(f"Compression failed: {str(e)}")
-
-            # Apply encryption if specified
-            if self.metadata["encryption"]:
-                # Add encryption logic here
-                pass
-
-            # Always base64 encode
-            return base64.b64encode(data.encode()).decode()
+    
+            # Base64 encode the final bytes
+            return base64.b64encode(current_data).decode()
+    
         except Exception as e:
             logger.error(f"Data encoding error: {str(e)}")
-            raise TransportError("Failed to encode data")
-
+            raise TransportError(f"Failed to encode data: {str(e)}")
+    
     def _decode_data(self, data: str) -> str:
         """Decode data with optional decompression and decryption"""
         try:
-            # Base64 decode
-            decoded = base64.b64decode(data).decode()
-
-            # Apply decryption if specified
-            if self.metadata["encryption"]:
-                # Add decryption logic here
-                pass
-
+            # Base64 decode first
+            current_data = base64.b64decode(data)  # Returns bytes
+    
             # Apply decompression if specified
             if self.metadata["compression"]:
                 try:
-                    compressor = CompressionRegistry.get_compressor(self.metadata["compression"])
-                    decoded = compressor.decompress(decoded)
+                    compressor = CompressionRegistry.get(self.metadata["compression"])
+                    current_data = compressor.decompress(current_data)  # Returns str
                 except Exception as e:
                     logger.error(f"Decompression error: {str(e)}")
                     raise TransportError(f"Decompression failed: {str(e)}")
-
-            return decoded
+            else:
+                # If no compression was used, decode the bytes to string
+                current_data = current_data.decode()
+    
+            return current_data
+    
         except Exception as e:
             logger.error(f"Data decoding error: {str(e)}")
-            raise TransportError("Failed to decode data")
+            raise TransportError(f"Failed to decode data: {str(e)}")

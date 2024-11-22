@@ -1,10 +1,11 @@
 from abc import ABC
 from typing import Dict, List, Any, Optional
+
 from ..interfaces.container import IContainer
 from ..interfaces.section import ISection
-from flextag.exceptions import SearchError
-from flextag.logger import logger
-from flextag.settings import Const
+from ...exceptions import SearchError
+from ...logger import logger
+from ...settings import Const
 
 
 class BaseContainer(ABC, IContainer):

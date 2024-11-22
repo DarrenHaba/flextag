@@ -1,4 +1,5 @@
 from typing import Protocol, Dict, List, Any, Optional
+
 from .section import ISection
 
 

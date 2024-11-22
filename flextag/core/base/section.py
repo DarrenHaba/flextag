@@ -1,10 +1,12 @@
 from abc import ABC
 from typing import List, Dict, Any
 from dataclasses import dataclass, field
+
 from ..interfaces.section import ISection
-from flextag.settings import Const
-from flextag.logger import logger
-from flextag.exceptions import ParameterError
+from ...exceptions import ParameterError
+from ...logger import logger
+from ...settings import Const
+
 
 
 @dataclass
@@ -33,21 +35,33 @@ class BaseSection(ABC, ISection):
         """Validate parameter types and values"""
         try:
             for key, value in self.parameters.items():
-                if (
-                    isinstance(value, str)
-                    and value.startswith('"')
-                    and value.endswith('"')
-                ):
-                    self.parameters[key] = value[1:-1]  # Strip quotes
-                elif isinstance(value, (int, float, bool, list)):
-                    continue
-                else:
+                # Show both key and value in error message
+                msg = f"key='{key}', value='{value}' (type={type(value)})"
+
+                # Simplified type validation
+                if not isinstance(value, (str, int, float, bool, list)):
+                    logger.error(f"Invalid parameter type: {msg}")
                     raise ParameterError(
-                        f"Invalid parameter type for {key}: {type(value)}"
+                        f"Invalid parameter type: {msg}\n"
+                        "Parameters must be string, number, boolean, or array"
                     )
-        except Exception as e:
-            logger.error(f"Parameter validation error: {str(e)}", section_id=self.id)
+
+                # Validate array contents if it's an array
+                if isinstance(value, list):
+                    for item in value:
+                        if not isinstance(item, (str, int, float, bool)):
+                            logger.error(f"Invalid array item type in parameter: {msg}")
+                            raise ParameterError(
+                                f"Invalid array item type in parameter: {msg}\n"
+                                "Array items must be string, number, or boolean"
+                            )
+
+        except ParameterError:
             raise
+        except Exception as e:
+            logger.error(f"Parameter validation error: {str(e)}",
+                         parameters=self.parameters)
+            raise ParameterError(f"Parameter validation failed: {str(e)}")
 
     def matches(self, query: str) -> bool:
         """Match section against query"""

@@ -1,10 +1,9 @@
-# flextag/logger.py
 import logging
 import sys
 from pathlib import Path
 from datetime import datetime
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class FlexTagLogger:

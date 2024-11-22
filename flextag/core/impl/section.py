@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
+
 from ..base.section import BaseSection
-from flextag.exceptions import ParameterError
-from flextag.logger import logger
-from flextag.settings import Const
+from ...exceptions import ParameterError
+from ...logger import logger
+from ...settings import Const
 
 
 @dataclass

@@ -1,5 +1,4 @@
 from typing import Protocol, Dict, List, Any
-from dataclasses import dataclass
 
 
 class ISection(Protocol):

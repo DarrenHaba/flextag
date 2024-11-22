@@ -1,10 +1,11 @@
 from datetime import datetime
 import hashlib
+
 from ..base.transport import BaseTransportContainer
 from ..interfaces.container import IContainer
-from flextag.exceptions import TransportError
-from flextag.logger import logger
-from flextag.settings import Const
+from ...exceptions import TransportError
+from ...logger import logger
+from ...settings import Const
 
 
 class TransportContainer(BaseTransportContainer):
