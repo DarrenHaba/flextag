@@ -73,10 +73,6 @@ Example here
 
 ----------Optional items below-----------
 
-# FlexTag is to data. What docker is to environments? 
-
-
-
 FlexTag eliminates ambiguity in data handling, ensuring you always know exactly what the data is. Unlike traditional systems, which require you to guess or infer the nature of the data, FlexTag provides a comprehensive metadata tagging system that tracks:
 
 - Type: Clearly defines whether the data is text, a list, a dictionary, a table (CSV), or something else entirely. It can even distinguish between complex data structures like:
@@ -91,13 +87,3 @@ FlexTag eliminates ambiguity in data handling, ensuring you always know exactly 
 - Encryption: Track whether the data is encrypted and, if so, which encryption method is used.
 
 With this level of detail, FlexTag enables advanced operations that are impossible or cumbersome with other systems. For instance, you can effortlessly distinguish between a YAML-formatted list of tasks and a JSON dictionary of configurations, allowing for more precise handling and processing.
-
-
-
-You Have The POWER! - it's not just a document container, FlexTag is a universal data container that can:
-
-- Hold multiple types of content
-- Enable quick metadata searching without content parsing
-- Work across multiple containers
-- Handle different transport/storage formats
-- Maintain structure regardless of encoding/encryption
