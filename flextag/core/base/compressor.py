@@ -1,8 +1,10 @@
 from abc import ABC
 from ..interfaces.compressor import ICompressor
 
+
 class BaseCompressor(ABC, ICompressor):
     """Base implementation of compression handler"""
+
     def compress(self, data: str) -> bytes:
         raise NotImplementedError
 

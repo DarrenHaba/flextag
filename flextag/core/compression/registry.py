@@ -1,11 +1,12 @@
 from typing import Dict, Type
 from ..interfaces.compressor import ICompressor
-from flextag.exceptions import CompressionError
-from flextag.logger import logger
+from ...exceptions import CompressionError
+from ...logger import logger
 
 
 class CompressionRegistry:
     """Registry for compression handlers"""
+
     _compressors: Dict[str, Type[ICompressor]] = {}
 
     @classmethod
@@ -21,4 +22,3 @@ class CompressionRegistry:
             logger.error(f"Unknown compression method: {name}")
             raise CompressionError(f"Unknown compression method: {name}")
         return cls._compressors[name]()
-

@@ -9,116 +9,140 @@ from ...settings import Const
 
 @dataclass
 class Section(BaseSection):
-    """Concrete implementation of FlexTag section"""
     id: str = ""
     tags: List[str] = field(default_factory=list)
     paths: List[str] = field(default_factory=list)
     parameters: Dict[str, Any] = field(default_factory=dict)
     content: str = ""
 
-    # Required parameters
-    fmt: str = Const.DEFAULTS["fmt"]
-    enc: str = Const.DEFAULTS["enc"]
-    crypt: str = Const.DEFAULTS["crypt"]
-    comp: str = Const.DEFAULTS["comp"]
-    lang: str = Const.DEFAULTS["lang"]
-
     @classmethod
     def from_header(cls, header: str, content: str = "") -> "Section":
         """Create section from header string"""
         try:
-            # Remove [[ and ]] and split into parts
-            header = header[len(Const.SEC_START):-2].strip()
+            # Remove [[ and ]]
+            header = header[2:-2].strip()
+            logger.debug(f"Parsing header: {header}")
 
-            # Parse section ID if present
+            # Check for ID first - it must be immediately after SEC: or META:
+            section_id = ""
             if ":" in header:
-                section_id, header = header.split(":", 1)
-            else:
-                section_id = ""
+                type_and_id, header = header.split(" ", 1)
+                if ":" in type_and_id:
+                    section_id = type_and_id.split(":", 1)[1]
+                    logger.debug(f"Found section ID: {section_id}")
 
-            parts = header.strip().split()
-
+            # Initialize collections
             tags = []
             paths = []
             parameters = {}
 
-            # Parse space-delimited parameters
-            for part in parts:
+            # Parse space-delimited parts
+            for part in header.strip().split():
                 if part.startswith("#"):
-                    tags.append(part[1:])
+                    tags.append(part[1:])  # Store without #
                 elif part.startswith("."):
-                    paths.append(part[1:])
+                    paths.append(part[1:])  # Store without .
                 elif "=" in part:
                     key, value = part.split("=", 1)
-                    parameters[key] = cls._parse_value(value)
+                    # Handle parameter values
+                    value = value.strip()
+                    if (value.startswith('"') and value.endswith('"')) or (
+                        value.startswith("'") and value.endswith("'")
+                    ):
+                        parameters[key.strip()] = value[1:-1]  # String
+                    elif value.lower() in ("true", "false"):
+                        parameters[key.strip()] = value.lower() == "true"  # Boolean
+                    elif value.startswith("[") and value.endswith("]"):
+                        # Array - simple split for now
+                        values = [
+                            v.strip().strip("\"'") for v in value[1:-1].split(",")
+                        ]
+                        parameters[key.strip()] = values
+                    elif "." in value and value.replace(".", "").isdigit():
+                        parameters[key.strip()] = float(value)  # Float
+                    elif value.isdigit():
+                        parameters[key.strip()] = int(value)  # Integer
+                    else:
+                        parameters[key.strip()] = value  # Raw string
 
             return cls(
                 id=section_id,
                 tags=tags,
                 paths=paths,
                 parameters=parameters,
-                content=content
+                content=content,
             )
 
         except Exception as e:
-            logger.error(f"Section parsing error: {str(e)}", header=header)
-            raise ParameterError(f"Invalid section header format: {header}")
+            logger.error(f"Section header parsing error: {str(e)}", header=header)
+            raise ParameterError(f"Failed to parse section header: {str(e)}")
 
-    @staticmethod
-    def _parse_value(value: str) -> Any:
-        """Parse parameter value to appropriate type"""
-        value = value.strip()
-
-        # String (quoted)
-        if value.startswith('"') and value.endswith('"'):
-            return value[1:-1]
-
-        # Boolean
-        if value.lower() == "true":
-            return True
-        if value.lower() == "false":
-            return False
-
-        # Array
-        if value.startswith("[") and value.endswith("]"):
-            return [v.strip().strip('"') for v in value[1:-1].split(",")]
-
-        # Number
-        try:
-            if "." in value:
-                return float(value)
-            return int(value)
-        except ValueError:
-            return value
-
-    def to_string(self) -> str:
-        """Convert section to string format"""
-        try:
-            # Build header parts
-            parts = []
-            if self.id:
-                parts.append(f"{Const.SEC_START}:{self.id}")
-            else:
-                parts.append(Const.SEC_START)
-
-            # Add tags and paths
-            parts.extend(f"#{tag}" for tag in self.tags)
-            parts.extend(f".{path}" for path in self.paths)
-
-            # Add parameters
-            for key, value in self.parameters.items():
-                if isinstance(value, str):
-                    parts.append(f'{key}="{value}"')
-                else:
-                    parts.append(f"{key}={value}")
-
-            header = f"{' '.join(parts)}]]"
-
-            # Combine with content
-            if self.content:
-                return f"{header}\n{self.content}\n{Const.SEC_END}"
-            return f"{header}\n{Const.SEC_END}"
-
-        except Exception as e:
-            logger.error(f"Section serialization error: {str(e)}")
-            raise ParameterError(f"Failed to serialize section: {str(e)}")
+    # @classmethod
+    # def from_header(cls, header: str, content: str = "") -> "Section":
+    #     """Create section from header string"""
+    #     try:
+    #         # Remove [[ and ]] and split into parts
+    #         header = header[len(Const.SEC_START):-2].strip()
+    #
+    #         # Parse section ID if present
+    #         section_id = ""
+    #         if ":" in header:
+    #             section_id, header = header.split(":", 1)
+    #
+    #         # Initialize collections
+    #         tags = []
+    #         paths = []
+    #         parameters = {}
+    #
+    #         # Parse space-delimited parts
+    #         for part in header.strip().split():
+    #             if part.startswith("#"):  # Tag
+    #                 tags.append(part[1:])
+    #             elif part.startswith("."): # Path
+    #                 paths.append(part[1:])
+    #             elif "=" in part:  # Parameter
+    #                 key, value = part.split("=", 1)
+    #                 key = key.strip()
+    #                 value = value.strip()
+    #
+    #                 # Parse value based on type
+    #                 if (value.startswith('"') and value.endswith('"')) or \
+    #                         (value.startswith("'") and value.endswith("'")):
+    #                     parameters[key] = value[1:-1]  # String
+    #                 elif value.lower() in ('true', 'false'):
+    #                     parameters[key] = value.lower() == 'true'  # Boolean
+    #                 elif value.startswith('[') and value.endswith(']'):
+    #                     # Array
+    #                     values = []
+    #                     for v in value[1:-1].split(','):
+    #                         v = v.strip()
+    #                         if (v.startswith('"') and v.endswith('"')) or \
+    #                                 (v.startswith("'") and v.endswith("'")):
+    #                             values.append(v[1:-1])
+    #                         elif v.lower() in ('true', 'false'):
+    #                             values.append(v.lower() == 'true')
+    #                         elif '.' in v and v.replace('.', '').isdigit():
+    #                             values.append(float(v))
+    #                         elif v.isdigit():
+    #                             values.append(int(v))
+    #                         else:
+    #                             values.append(v)
+    #                     parameters[key] = values
+    #                 elif '.' in value and value.replace('.', '').isdigit():
+    #                     parameters[key] = float(value)  # Float
+    #                 elif value.isdigit():
+    #                     parameters[key] = int(value)  # Integer
+    #                 else:
+    #                     parameters[key] = value  # Raw string
+    #
+    #         return cls(
+    #             id=section_id,
+    #             tags=tags,
+    #             paths=paths,
+    #             parameters=parameters,
+    #             content=content
+    #         )
+    #
+    #     except Exception as e:
+    #         logger.error(f"Section header parsing error: {str(e)}", header=header)
+    #         raise ParameterError(f"Failed to parse section header: {str(e)}")

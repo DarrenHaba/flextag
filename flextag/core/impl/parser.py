@@ -2,6 +2,7 @@ from typing import Any, Dict, Type
 import json
 import yaml
 
+from .container import Container
 from ..base.parser import BaseFlexTagParser
 from ..interfaces.parser import IContentParser
 from ...exceptions import ContainerError
@@ -10,6 +11,7 @@ from ...logger import logger
 
 class ContentParser(IContentParser):
     """Base content format parser"""
+
     def parse(self, content: str) -> Any:
         return content  # Pass through for text
 
@@ -19,6 +21,7 @@ class ContentParser(IContentParser):
 
 class JSONParser(IContentParser):
     """JSON format parser"""
+
     def parse(self, content: str) -> Dict:
         if not content.strip():
             return {}
@@ -30,6 +33,7 @@ class JSONParser(IContentParser):
 
 class YAMLParser(IContentParser):
     """YAML format parser"""
+
     def parse(self, content: str) -> Dict:
         if not content.strip():
             return {}
@@ -50,10 +54,10 @@ class FlexTagParser(BaseFlexTagParser):
         self.register_content_parser("yaml", YAMLParser())
         logger.debug("Initialized FlexTag parser with default content parsers")
 
-    def parse(self, content: str) -> "Container":
+    def parse(self, content: str) -> Container:
         """Parse string content to Container"""
         try:
-            from .container import Container
+            # Create container from string content
             container = Container.from_string(content)
 
             # Parse section contents based on format
@@ -61,19 +65,17 @@ class FlexTagParser(BaseFlexTagParser):
                 fmt = section.parameters.get("fmt", "text")
                 try:
                     parser = self.get_content_parser(fmt)
-                    section.content = parser.parse(section.content)
+                    if parser:
+                        section.content = parser.parse(section.content)
                 except Exception as e:
-                    logger.error(f"Failed to parse section content: {str(e)}",
-                                 section_id=section.id, fmt=fmt)
-                    raise ContainerError(
-                        f"Failed to parse content for section '{section.id}' "
-                        f"with format '{fmt}': {str(e)}"
+                    logger.warning(
+                        f"Failed to parse section content: {str(e)}",
+                        section_id=section.id,
+                        fmt=fmt,
                     )
 
             return container
 
-        except ContainerError:
-            raise
         except Exception as e:
             logger.error(f"Container parsing error: {str(e)}")
             raise ContainerError(f"Failed to parse container: {str(e)}")
@@ -83,6 +85,7 @@ class FlexTagParser(BaseFlexTagParser):
         try:
             # Create a copy to avoid modifying the original
             from .container import Container
+
             doc = Container()
             doc.metadata = container.metadata.copy()
             doc.params = container.params.copy()
@@ -93,22 +96,27 @@ class FlexTagParser(BaseFlexTagParser):
                 try:
                     parser = self.get_content_parser(fmt)
                     # Create new section with dumped content
-                    new_section = section.__class__(**{
-                        'id': section.id,
-                        'tags': section.tags.copy(),
-                        'paths': section.paths.copy(),
-                        'parameters': section.parameters.copy(),
-                        'content': parser.dump(section.content),
-                        'fmt': section.fmt,
-                        'enc': section.enc,
-                        'crypt': section.crypt,
-                        'comp': section.comp,
-                        'lang': section.lang
-                    })
+                    new_section = section.__class__(
+                        **{
+                            "id": section.id,
+                            "tags": section.tags.copy(),
+                            "paths": section.paths.copy(),
+                            "parameters": section.parameters.copy(),
+                            "content": parser.dump(section.content),
+                            "fmt": section.fmt,
+                            "enc": section.enc,
+                            "crypt": section.crypt,
+                            "comp": section.comp,
+                            "lang": section.lang,
+                        }
+                    )
                     doc.sections.append(new_section)
                 except Exception as e:
-                    logger.error(f"Failed to dump section content: {str(e)}",
-                                 section_id=section.id, fmt=fmt)
+                    logger.error(
+                        f"Failed to dump section content: {str(e)}",
+                        section_id=section.id,
+                        fmt=fmt,
+                    )
                     raise ContainerError(
                         f"Failed to serialize content for section '{section.id}' "
                         f"with format '{fmt}': {str(e)}"

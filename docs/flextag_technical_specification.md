@@ -68,6 +68,37 @@ FlexTag provides shorthand syntax for common parameter patterns:
    ```
    - Must match pattern: `[a-z0-9_]`
 
+### **Tags with Wildcards**
+
+FlexTag supports wildcard searches for tags, allowing prefix, suffix, and infix matching. Wildcards are denoted by an asterisk (`*`) and must follow the `#` symbol.
+
+- **Prefix Match**: `#tag*` → Matches any tag that starts with "tag"
+- **Suffix Match**: `#*tag` → Matches any tag that ends with "tag"
+- **Infix Match**: `#*tag*` → Matches any tag that contains "tag" anywhere
+
+**Examples:**
+```
+#config        → tags=["config"]
+#conf*         → tags starting with "conf" (e.g., "config", "confidential")
+#*fig          → tags ending with "fig" (e.g., "config")
+#*fig*         → tags containing "fig" anywhere (e.g., "config", "figure")
+```
+
+### **Paths with Wildcards**
+
+FlexTag supports wildcard searches for paths, allowing prefix, suffix, and infix matching. Wildcards are denoted by an asterisk (`*`) and must follow the `.` symbol.
+
+- **Prefix Match**: `.path*` → Matches any path that starts with "path" (e.g., `.path.to.data`, `.pathology`)
+- **Suffix Match**: `.*path` → Matches any path that ends with "path" (e.g., `.my.path`, `.your.path`)
+- **Infix Match**: `.*path*` → Matches any path that contains "path" anywhere (e.g., `.data.path.to.content`, `.pathway`)
+
+**Examples:**
+```
+.content            → paths=["content"]
+.con*               → paths starting with "con" (e.g., "content", "config")
+.*ent               → paths ending with "ent" (e.g., "content")
+.*ent*              → paths containing "ent" anywhere (e.g., "content", "intent")
+```
 
 ## Encoding Handling
 

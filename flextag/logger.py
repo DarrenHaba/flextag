@@ -37,7 +37,7 @@ class FlexTagLogger:
         """Set up file handlers for different log levels"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Debug log - contains everything
+        # Debug log
         debug_handler = logging.FileHandler(self.log_dir / f"debug_{timestamp}.log")
         debug_handler.setLevel(logging.DEBUG)
         debug_handler.setFormatter(
@@ -45,10 +45,10 @@ class FlexTagLogger:
         )
         self.logger.addHandler(debug_handler)
 
-        # Parser state log - structured logging of parser states
+        # Parser state log
         self.state_log_path = self.log_dir / f"parser_state_{timestamp}.jsonl"
 
-        # Error log - only errors and critical issues
+        # Error log
         error_handler = logging.FileHandler(self.log_dir / f"error_{timestamp}.log")
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(
@@ -104,6 +104,7 @@ class FlexTagLogger:
         """Log error message with context"""
         extra_str = self._format_extra(kwargs)
         self.logger.error(f"{msg}{extra_str}", extra={"context": extra_str})
+        # Update parser state
         self.parser_state["errors"].append(
             {"timestamp": datetime.now().isoformat(), "message": msg, "context": kwargs}
         )
