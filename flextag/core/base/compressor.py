@@ -1,5 +1,5 @@
 from abc import ABC
-from ..interfaces.compressor import ICompressor
+from flextag.core.interfaces.compression import ICompressor
 
 
 class BaseCompressor(ABC, ICompressor):

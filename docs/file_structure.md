@@ -1,31 +1,33 @@
 ```
 flextag/
 ├── __init__.py
-├── exceptions.py           # FlexTagError
+├── exceptions.py
 ├── logger.py          
 ├── settings.py          
-├── __init__.py
 └── core/
     ├── __init__.py
     ├── compression.py
-    ├── interfaces/
-    │   ├── __init__.py
-    │   ├── section.py      # ISection
-    │   ├── document.py     # IContainer
-    │   ├── transport.py    # ITransportContainer
-    │   └── parser.py       # IParser
-    ├── base/
-    │   ├── __init__.py
-    │   ├── section.py      # BaseSection
-    │   ├── document.py     # BaseContainer
-    │   ├── transport.py    # BaseTransportContainer
-    │   └── parser.py       # BaseParser
     ├── factory.py          # FlexTagFactory
     ├── highlighter.py      # FlexTagHighlighter
-    └── impl/
-        ├── __init__.py
-        ├── section.py      # Concrete Section
-        ├── document.py     # Concrete Container
-        ├── transport.py    # TransportContainer
-        └── parser.py       # Concrete Parser
-```
+    ├── base/
+    │   ├── compressor.py   # BaseCompressor
+    │   ├── container.py    # BaseContainer
+    │   ├── parser.py       # BaseFlexTagParser
+    │   ├── search.py       # BaseSearchQuery, BaseSearchAlgorithm
+    │   ├── section.py      # BaseSection
+    │   └── transport.py    # BaseTransportContainer
+    ├── impl/
+    │   ├── compressor.py   # GzipCompressor, ZipCompressor
+    │   ├── container.py    # Container
+    │   ├── parser.py       # ContentParser, JSONParser, YAMLParser, FlexTagParser
+    │   ├── registry.py     # CompressionRegistry
+    │   ├── search.py       # ExactMatchAlgorithm, WildcardMatchAlgorithm
+    │   ├── section.py      # Section
+    │   └── transport.py    # TransportContainer
+    └── interfaces/
+        ├── compressor.py   # ICompressor
+        ├── container.py    # IContainer 
+        ├── parser.py       # IContentParser, IFlexTagParser
+        ├── search.py       # ISearchQuery, ISearchAlgorithm
+        ├── section.py      # ISection
+        └── transport.py    # ITransportContainer    

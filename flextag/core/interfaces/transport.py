@@ -1,16 +1,47 @@
-from typing import Protocol
+from typing import Protocol, Literal
+from flextag.core.types.container import Container
 
-from .container import IContainer
+EncodingType = Literal["base64", "base32", "base16"]
+
+class IEncoder(Protocol):
+    """Interface for data encoding"""
+
+    def encode(self, data: bytes) -> str:
+        """Encode bytes to string"""
+        ...
+
+    def decode(self, data: str) -> bytes:
+        """Decode string to bytes"""
+        ...
+
+
+class ICompressor(Protocol):
+    """Interface for data compression"""
+
+    def compress(self, data: str) -> bytes:
+        """Compress string to bytes"""
+        ...
+
+    def decompress(self, data: bytes) -> str:
+        """Decompress bytes to string"""
+        ...
 
 
 class ITransportContainer(Protocol):
-    """Interface for transport container format"""
+    """Interface for transport containers"""
 
-    def encode(self, container: IContainer) -> str:
+    def set_encoding(self, encoding: EncodingType) -> None:
+        """Set encoding type (base64, base32, base16)"""
+        ...
+
+    def set_compression(self, compression: str) -> None:
+        """Set compression algorithm"""
+        ...
+
+    def encode(self, container: Container) -> str:
         """Convert data container to transport format"""
         ...
 
-    @classmethod
-    def decode(cls, data: str) -> IContainer:
-        """Convert transport format to data container"""
+    def decode(self, transport: str) -> Container:
+        """Convert transport format back to container"""
         ...
