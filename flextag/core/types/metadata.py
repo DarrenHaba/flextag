@@ -1,50 +1,25 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
-from .parameter import ParameterValue, ParameterType
-from ...exceptions import ParameterError
-from ...logger import logger
+from datetime import datetime
 
 
 @dataclass
-class MetadataParameters:
-    """Default parameters that apply to both metadata and sections"""
-    fmt: str = "text"     # Format type
-    enc: str = "utf-8"    # Encoding
-    crypt: str = ""       # Encryption method
-    comp: str = ""        # Compression method
-    lang: str = "en"      # Language
-
-
-@dataclass
-class Metadata(MetadataParameters):
-    """Common metadata structure for both sections and containers"""
-    id: str = ""
+class Metadata:
+    """Core metadata structure for data blocks"""
+    # Required fields
+    id: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     paths: List[str] = field(default_factory=list)
-    parameters: Dict[str, ParameterValue] = field(default_factory=dict)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
-    def add_parameter(self, key: str, raw_value: str) -> None:
-        """Add a parameter with proper type inference"""
-        try:
-            self.parameters[key] = ParameterValue.parse(raw_value)
-            logger.debug(
-                f"Added parameter: {key}={self.parameters[key].to_string()} "
-                f"(type: {self.parameters[key].type})"
-            )
-        except Exception as e:
-            logger.error(f"Failed to add parameter: {str(e)}",
-                         key=key, value=raw_value)
-            raise ParameterError(f"Failed to add parameter '{key}': {str(e)}")
-
-    def get_parameter(self, key: str) -> Optional[Any]:
-        """Get parameter value, returns None if not found"""
-        param = self.parameters.get(key)
-        return param.value if param else None
-
-    def get_parameter_type(self, key: str) -> Optional[ParameterType]:
-        """Get parameter type, returns None if not found"""
-        param = self.parameters.get(key)
-        return param.type if param else None
+    # Optional fields
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
+    format: str = "text"           # Content format (text, json, yaml, etc)
+    encoding: str = "utf-8"        # Content encoding
+    compression: str = ""          # Compression method if used
+    encryption: str = ""           # Encryption method if used
+    version: str = "1.0"          # Metadata version
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert metadata to dictionary"""
@@ -52,41 +27,79 @@ class Metadata(MetadataParameters):
             "id": self.id,
             "tags": self.tags.copy(),
             "paths": self.paths.copy(),
-            "parameters": {
-                k: v.to_string() for k, v in self.parameters.items()
-            },
-            "fmt": self.fmt,
-            "enc": self.enc,
-            "crypt": self.crypt,
-            "comp": self.comp,
-            "lang": self.lang
+            "parameters": self.parameters.copy(),
+            "created": self.created.isoformat() if self.created else None,
+            "modified": self.modified.isoformat() if self.modified else None,
+            "format": self.format,
+            "encoding": self.encoding,
+            "compression": self.compression,
+            "encryption": self.encryption,
+            "version": self.version
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Metadata':
         """Create metadata from dictionary"""
-        try:
-            metadata = cls(
-                id=data.get("id", ""),
-                fmt=data.get("fmt", "text"),
-                enc=data.get("enc", "utf-8"),
-                crypt=data.get("crypt", ""),
-                comp=data.get("comp", ""),
-                lang=data.get("lang", "en")
-            )
+        # Parse dates if present
+        created = (
+            datetime.fromisoformat(data["created"])
+            if data.get("created")
+            else None
+        )
+        modified = (
+            datetime.fromisoformat(data["modified"])
+            if data.get("modified")
+            else None
+        )
 
-            metadata.tags = data.get("tags", [])
-            metadata.paths = data.get("paths", [])
+        return cls(
+            id=data.get("id"),
+            tags=data.get("tags", []).copy(),
+            paths=data.get("paths", []).copy(),
+            parameters=data.get("parameters", {}).copy(),
+            created=created,
+            modified=modified,
+            format=data.get("format", "text"),
+            encoding=data.get("encoding", "utf-8"),
+            compression=data.get("compression", ""),
+            encryption=data.get("encryption", ""),
+            version=data.get("version", "1.0")
+        )
 
-            # Parse parameters
-            for key, value in data.get("parameters", {}).items():
-                metadata.add_parameter(key, value)
 
-            return metadata
+@dataclass
+class TransportMetadata(Metadata):
+    """Extended metadata for transport containers"""
+    checksum: str = ""           # Content checksum
+    transport_version: str = "1.0"  # Transport format version
+    source_file: Optional[str] = None  # Original file if from file
+    chunk_size: int = 0         # For chunked transfers
+    total_chunks: int = 0       # For chunked transfers
+    chunk_index: int = 0        # For chunked transfers
 
-        except Exception as e:
-            logger.error(f"Failed to create metadata from dict: {str(e)}",
-                         data=data)
-            raise ParameterError(
-                f"Failed to create metadata from dictionary: {str(e)}"
-            )
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert transport metadata to dictionary"""
+        data = super().to_dict()
+        data.update({
+            "checksum": self.checksum,
+            "transport_version": self.transport_version,
+            "source_file": self.source_file,
+            "chunk_size": self.chunk_size,
+            "total_chunks": self.total_chunks,
+            "chunk_index": self.chunk_index
+        })
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TransportMetadata':
+        """Create transport metadata from dictionary"""
+        metadata = super().from_dict(data)
+        return cls(
+            **metadata.__dict__,
+            checksum=data.get("checksum", ""),
+            transport_version=data.get("transport_version", "1.0"),
+            source_file=data.get("source_file"),
+            chunk_size=data.get("chunk_size", 0),
+            total_chunks=data.get("total_chunks", 0),
+            chunk_index=data.get("chunk_index", 0)
+        )

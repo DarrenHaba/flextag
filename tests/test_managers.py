@@ -1,276 +1,253 @@
+import json
+
 import pytest
-from typing import Dict, Any
-from flextag.core.managers.registry import RegistryManager
-from flextag.core.managers.parser import ParserManager
-from flextag.core.managers.search import SearchManager
-from flextag.core.managers.transport import TransportManager
-from flextag.core.parsers.content import JSONParser, YAMLParser, TextParser
-from flextag.core.search.algorithms import ExactMatchAlgorithm, WildcardMatchAlgorithm
-from flextag.core.types.container import Container
-from flextag.core.types.section import Section
-from flextag.core.types.metadata import Metadata
-from flextag.exceptions import FlexTagError
 
-# Add more test cases?
-# Add integration tests between managers?
-# Add performance benchmarks?
+from flextag import DataManager
+from flextag.managers.base import BaseManager, ManagerEvent
+from flextag.managers.query import QueryManager
+from flextag.core.types.block import DataBlock
 
 
-class TestRegistryManager:
-    """Test registry manager functionality"""
+def test_base_manager_events():
+    """Test basic event emission and handling"""
+    manager = BaseManager("test")
+    events_received = []
 
-    @pytest.fixture
-    def registry_manager(self):
-        return RegistryManager()
+    def handle_event(event: ManagerEvent):
+        events_received.append(event)
 
-    def test_registry_creation(self, registry_manager):
-        """Test creating new registries"""
-        registry_manager.create_registry("test")
-        assert "test" in registry_manager.list_registries()
+    manager.subscribe("test_event", handle_event)
+    manager.emit("test_event", {"data": "test"})
 
-        # Test duplicate creation
-        with pytest.raises(FlexTagError):
-            registry_manager.create_registry("test")
-
-    def test_registration(self, registry_manager):
-        """Test registering implementations"""
-        class TestImpl:
-            pass
-
-        registry_manager.register("test_registry", "test_impl", TestImpl)
-
-        # Verify registration
-        impl = registry_manager.get("test_registry", "test_impl")
-        assert impl == TestImpl
-
-        # Test getting nonexistent implementation
-        with pytest.raises(FlexTagError):
-            registry_manager.get("test_registry", "nonexistent")
-
-    def test_unregistration(self, registry_manager):
-        """Test unregistering implementations"""
-        registry_manager.register("test_registry", "test_impl", object)
-        registry_manager.unregister("test_registry", "test_impl")
-
-        # Verify removal
-        with pytest.raises(FlexTagError):
-            registry_manager.get("test_registry", "test_impl")
-
-    def test_list_implementations(self, registry_manager):
-        """Test listing registered implementations"""
-        registry_manager.register("test_registry", "impl1", object)
-        registry_manager.register("test_registry", "impl2", object)
-
-        impls = registry_manager.list_registered("test_registry")
-        assert "impl1" in impls
-        assert "impl2" in impls
+    assert len(events_received) == 1
+    assert events_received[0].source == "test"
+    assert events_received[0].data["data"] == "test"
 
 
-class TestParserManager:
-    """Test parser manager functionality"""
+def test_base_manager_registry():
+    """Test registry functionality"""
+    manager = BaseManager("test")
 
-    @pytest.fixture
-    def parser_manager(self):
-        return ParserManager()
+    # Test registration
+    manager.register("test_registry", "item1", "value1")
+    assert manager.get("test_registry", "item1") == "value1"
 
-    @pytest.fixture
-    def sample_content(self):
-        return """[[PARAMS fmt="json"]]
-[[META:config #system]]
-[[SEC:data fmt="json"]]
-{"key": "value"}
-[[/SEC]]"""
+    # Test missing registry
+    with pytest.raises(ValueError):
+        manager.get("missing", "item")
 
-    def test_content_parser_registration(self, parser_manager):
-        """Test registering content parsers"""
-        parser_manager.register_content_parser("json", JSONParser())
-        parser_manager.register_content_parser("yaml", YAMLParser())
-
-        # Test getting registered parser
-        json_parser = parser_manager.get_content_parser("json")
-        assert isinstance(json_parser, JSONParser)
-
-        # Test getting nonexistent parser
-        with pytest.raises(FlexTagError):
-            parser_manager.get_content_parser("nonexistent")
-
-    def test_container_parsing(self, parser_manager, sample_content):
-        """Test parsing complete container"""
-        parser_manager.register_container_parser(ContainerParser())
-        parser_manager.register_content_parser("json", JSONParser())
-
-        container = parser_manager.parse_container(sample_content)
-        assert container.metadata.id == "config"
-        assert "system" in container.metadata.tags
-        assert len(container.sections) == 1
-        assert container.sections[0].metadata.id == "data"
-
-    def test_section_parsing(self, parser_manager):
-        """Test parsing individual section"""
-        parser_manager.register_section_parser(SectionParser())
-        parser_manager.register_content_parser("json", JSONParser())
-
-        content = '''[[SEC:test fmt="json"]]
-{"key": "value"}
-'''
-        section = parser_manager.parse_section(content, "json")
-        assert section.metadata.id == "test"
-        assert section.content["key"] == "value"
+    # Test missing implementation
+    with pytest.raises(ValueError):
+        manager.get("test_registry", "missing")
 
 
-class TestSearchManager:
-    """Test search manager functionality"""
+def test_query_manager_initialization():
+    """Test QueryManager setup"""
+    manager = QueryManager()
 
-    @pytest.fixture
-    def search_manager(self):
-        manager = SearchManager()
-        manager.register_algorithm("exact", ExactMatchAlgorithm)
-        manager.register_algorithm("wildcard", WildcardMatchAlgorithm)
-        return manager
+    # Verify DuckDB setup
+    result = manager.conn.execute("SELECT COUNT(*) FROM blocks").fetchone()
+    assert result[0] == 0
 
-    @pytest.fixture
-    def test_container(self):
-        """Create test container with sections"""
-        container = Container.create()
-
-        # Add sections
-        section1 = Section.create()
-        section1.metadata = Metadata(
-            id="config",
-            tags=["system", "database"],
-            paths=["sys.config"]
-        )
-
-        section2 = Section.create()
-        section2.metadata = Metadata(
-            id="api",
-            tags=["service", "web"],
-            paths=["sys.api"]
-        )
-
-        container.add_section(section1)
-        container.add_section(section2)
-        return container
-
-    def test_algorithm_registration(self, search_manager):
-        """Test registering search algorithms"""
-        # Test setting active algorithm
-        search_manager.set_active_algorithm("exact")
-
-        # Test invalid algorithm
-        with pytest.raises(SearchError):
-            search_manager.set_active_algorithm("nonexistent")
-
-    def test_auto_algorithm_selection(self, search_manager):
-        """Test automatic algorithm selection"""
-        # Simple query should use exact match
-        search_manager.auto_select_algorithm("#system")
-        assert isinstance(search_manager._active_algorithm, ExactMatchAlgorithm)
-
-        # Wildcard query should use wildcard match
-        search_manager.auto_select_algorithm("#sys*")
-        assert isinstance(search_manager._active_algorithm, WildcardMatchAlgorithm)
-
-    def test_find_operations(self, search_manager, test_container):
-        """Test find operations"""
-        # Test find_first
-        section = search_manager.find_first(test_container, "#system")
-        assert section.metadata.id == "config"
-
-        # Test find all
-        sections = search_manager.find(test_container, "#service")
-        assert len(sections) == 1
-        assert sections[0].metadata.id == "api"
-
-    def test_container_filtering(self, search_manager, test_container):
-        """Test container filtering"""
-        containers = [test_container]
-
-        # Filter by metadata
-        test_container.metadata.tags.append("prod")
-        filtered = search_manager.filter(containers, "#prod")
-        assert len(filtered) == 1
-
-        # Filter with no matches
-        filtered = search_manager.filter(containers, "#staging")
-        assert len(filtered) == 0
+    # Verify indexes
+    indexes = manager.conn.execute("""
+        SELECT name FROM sqlite_master 
+        WHERE type='index' AND sql IS NOT NULL
+    """).fetchall()
+    assert len(indexes) == 2
 
 
-class TestTransportManager:
-    """Test transport manager functionality"""
+def test_query_manager_block_handling():
+    """Test block event handling and storage"""
+    manager = QueryManager()
 
-    @pytest.fixture
-    def transport_manager(self):
-        return TransportManager()
+    # Create test block
+    block = DataBlock(
+        id="test1",
+        tags=["tag1", "tag2"],
+        paths=["path.to.test"],
+        parameters={"format": "json"},
+        content_start=1,
+        content_end=3
+    )
 
-    @pytest.fixture
-    def test_container(self):
-        """Create test container"""
-        container = Container.create()
-        container.metadata = Metadata(id="test", tags=["prod"])
-        return container
+    # Simulate block_parsed event
+    manager.handle_block_parsed(ManagerEvent(
+        source="data_manager",
+        event_type="block_parsed",
+        data={"block": block}
+    ))
 
-    def test_encoding_configuration(self, transport_manager):
-        """Test encoding configuration"""
-        # Test setting valid encoding
-        transport_manager.set_default_encoding("base64")
-
-        # Test invalid encoding
-        with pytest.raises(TransportError):
-            transport_manager.set_default_encoding("invalid")
-
-    def test_compression_configuration(self, transport_manager):
-        """Test compression configuration"""
-        # Register compressor
-        transport_manager.register_compressor("gzip", GzipCompressor)
-
-        # Test setting valid compression
-        transport_manager.set_default_compression("gzip")
-
-        # Test invalid compression
-        with pytest.raises(TransportError):
-            transport_manager.set_default_compression("invalid")
-
-    def test_transport_operations(self, transport_manager, test_container):
-        """Test transport operations"""
-        # Register required components
-        transport_manager.register_transport_container(TransportContainer)
-        transport_manager.register_compressor("gzip", GzipCompressor)
-        transport_manager.set_default_encoding("base64")
-
-        # Test transport conversion
-        transport_data = transport_manager.to_transport(test_container)
-        assert isinstance(transport_data, str)
-        assert transport_data.startswith("FLEXTAG__META_")
-
-        # Test transport parsing
-        restored = transport_manager.from_transport(transport_data)
-        assert restored.metadata.id == test_container.metadata.id
-        assert restored.metadata.tags == test_container.metadata.tags
+    # Verify block was stored
+    result = manager.conn.execute("SELECT * FROM blocks").fetchone()
+    assert result is not None
+    assert result[0] == "test1"  # block_id
+    assert "tag1" in result[2]   # tags
+    assert "tag2" in result[2]   # tags
+    assert "path.to.test" in result[3]  # paths
 
 
-@pytest.mark.parametrize("manager_cls,expected_features", [
-    (RegistryManager, ["create_registry", "register", "unregister", "get"]),
-    (ParserManager, ["parse_container", "parse_section", "register_content_parser"]),
-    (SearchManager, ["find", "find_first", "filter", "register_algorithm"]),
-    (TransportManager, ["to_transport", "from_transport", "register_compressor"])
-])
-def test_manager_interfaces(manager_cls, expected_features):
-    """Test manager interfaces implement required features"""
-    manager = manager_cls()
-    for feature in expected_features:
-        assert hasattr(manager, feature)
+def test_query_manager_search():
+    """Test search functionality"""
+    manager = QueryManager()
+
+    # Add test data
+    block = DataBlock(
+        id="test1",
+        tags=["tag1"],
+        paths=["path.test"],
+        parameters={"format": "json"},
+        content_start=1,
+        content_end=3
+    )
+
+    manager.handle_block_parsed(ManagerEvent(
+        source="data_manager",
+        event_type="block_parsed",
+        data={"block": block}
+    ))
+
+    # Mock query parser
+    class MockQueryParser:
+        def to_sql(self, query: str) -> str:
+            return "SELECT * FROM blocks WHERE block_id = 'test1'"
+
+    manager.register("query_parsers", "default", MockQueryParser())
+
+    # Test search
+    results = manager.search(":test1")
+    assert len(results) == 1
+    assert results[0]["block_id"] == "test1"
 
 
-def test_manager_isolation():
-    """Test managers maintain proper isolation"""
-    registry = RegistryManager()
-    parser = ParserManager()
-    search = SearchManager()
-    transport = TransportManager()
+def test_manager_connections():
+    """Test manager interconnection and event propagation"""
+    manager1 = BaseManager("manager1")
+    manager2 = BaseManager("manager2")
 
-    # Each manager should maintain its own state
-    registry.create_registry("test")
-    assert "test" not in parser.__dict__
-    assert "test" not in search.__dict__
-    assert "test" not in transport.__dict__
+    events_received = []
+
+    def handle_event(event: ManagerEvent):
+        events_received.append(event)
+
+    manager2.subscribe("test_event", handle_event)
+    manager1.connect(manager2)
+
+    manager1.emit("test_event", {"data": "test"})
+
+    assert len(events_received) == 1
+    assert events_received[0].source == "manager1"
+
+
+def test_manager_event_handling():
+    """Test event propagation between managers"""
+    # Setup
+    data_manager = DataManager()
+    query_manager = QueryManager()
+
+    # Initialize test block
+    test_block = DataBlock(
+        id="test1",
+        tags=["example"],
+        paths=[],
+        parameters={},
+        content_start=1,
+        content_end=1
+    )
+
+    # Track each step
+    events_received = []
+    blocks_processed = []
+    db_operations = []
+
+    def test_handler(event):
+        events_received.append(event)
+        try:
+            block = event.data["block"]
+            blocks_processed.append(block.id)
+
+            # Attempt DB insert
+            query_manager.conn.execute("""
+                INSERT INTO blocks (
+                    block_id, file_path, tags, paths, parameters, 
+                    content_start, content_end
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [
+                block.id,
+                None,
+                block.tags,
+                block.paths,
+                json.dumps(block.parameters),
+                block.content_start,
+                block.content_end
+            ])
+            db_operations.append("insert_success")
+        except Exception as e:
+            db_operations.append(f"insert_failed: {str(e)}")
+
+    # Connect everything
+    query_manager._event_handlers = [test_handler]
+    query_manager.subscribe("block_parsed", test_handler)
+    data_manager.connect(query_manager)
+
+    # Emit event
+    data_manager.emit("block_parsed", {"block": test_block})
+
+    # Verify each step
+    print("\nEvent propagation test results:")
+    print(f"Events received: {len(events_received)}")
+    print(f"Blocks processed: {blocks_processed}")
+    print(f"DB operations: {db_operations}")
+
+    # Check database content
+    rows = query_manager.conn.execute("SELECT * FROM blocks").fetchall()
+    print(f"Database rows: {rows}")
+
+    # Original assertions
+    assert len(events_received) == 1, "Event wasn't received"
+    assert len(blocks_processed) == 1, "Block wasn't processed"
+    assert blocks_processed[0] == "test1", "Wrong block processed"
+    assert db_operations[0] == "insert_success", "DB insert failed"
+
+    count = query_manager.conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
+    assert count == 1, f"Expected 1 row in database, found {count}"
+
+
+def test_duckdb_initialization():
+    """Test DuckDB setup"""
+    query_manager = QueryManager()
+
+    # Check table exists
+    tables = query_manager.conn.execute("""
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='blocks'
+    """).fetchall()
+
+    assert len(tables) == 1, "blocks table not created"
+
+    # Check table schema
+    schema = query_manager.conn.execute("DESCRIBE blocks").fetchall()
+    print("\nTable schema:")
+    for col in schema:
+        print(f"Column: {col}")
+
+    # Verify we can insert
+    test_data = {
+        "block_id": "test",
+        "file_path": None,
+        "tags": ["tag1"],
+        "paths": [],
+        "parameters": "{}",
+        "content_start": 1,
+        "content_end": 1
+    }
+
+    query_manager.conn.execute("""
+        INSERT INTO blocks (
+            block_id, file_path, tags, paths, parameters, 
+            content_start, content_end
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, list(test_data.values()))
+
+    count = query_manager.conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
+    assert count == 1, "Test insert failed"

@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/flextag.iml" filepath="$PROJECT_DIR$/.idea/flextag.iml" />
+      <module fileurl="file://$PROJECT_DIR$/flextag2/.idea/flextag2.iml" filepath="$PROJECT_DIR$/flextag2/.idea/flextag2.iml" />
     </modules>
   </component>
 </project>
