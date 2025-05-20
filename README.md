@@ -1,452 +1,624 @@
-# Flex Tag
+# FlexTag
 
-**A streamlined solution for structuring and parsing complex AI responses**
+FlexTag is a bracket-based markup language with sections, schema validation, and rich querying capabilities. Built to work seamlessly with FTML for advanced data storage and validation.
 
-Flex Tag is a Python package (still in bata) that provides a simple, reliable way to structure and parse complex responses from Large Language Models (LLMs) and other AI systems. It offers a flexible tagging system that allows for the organization of multiple types of content within a single response, including:
+## ⚠️ EXPERIMENTAL WARNING ⚠️
 
-- Plain text responses
-- Code snippets in various languages
-- File locations or references
-- Structured data (like JSON or YAML)
-- Descriptions or metadata
-- And more
-
-Key features:
-
-1. **API-friendly**: Designed to work seamlessly with AI APIs, allowing for structured responses that are easy to parse programmatically.
-2. **Human-readable**: The Flex Tag format is intuitive and easy to read, making it suitable for both machine and human consumption.
-3. **Multi-response handling**: Capable of organizing multiple distinct pieces of information within a single response, solving the challenge of getting varied content from a single API call.
-4. **Language-agnostic**: While implemented in Python, the Flex Tag format itself is language-independent, making it adaptable to various programming environments.
-5. **Customizable**: Users can define their own tags to suit specific use cases, providing flexibility for diverse applications.
-
-Flex Tag bridges the gap between unstructured AI outputs and the structured data often required in practical applications, making it easier to integrate AI responses into existing workflows and systems.
-
----
-
-## Contents
-
-- [Installation](#installation)
-- [Quick Start Example ](#quick-start)
-- [API Integration Example ](#chatgpt-example)
-- [API Reference](#api-reference)
-- [Converting to Other Formats](#converting)
-- [Flex Tag System Standards](#standards)
-- [Collaboration and Feedback](#feedback)
-
-
-## Links
-
-- [Project Repository](https://github.com/DarrenHaba/flextag)
-- [Issue Tracker](https://github.com/DarrenHaba/flextag/issues)
-
----
-
-<a id="installation"></a>
+> FlexTag is currently in the alpha stage (v0.3.0a1) with experimental syntax that may change significantly between versions. DO NOT use in production systems or with critical data until a stable 1.0 release. And there are still missing features, and you will find bugs. The purpose of this release is to test and refine the syntax.**
 
 ## Installation
 
-``` bash
+Install from PyPI:
+
+```bash
 pip install flextag
 ```
 
-This will download and install the latest version of Flex Tag and its dependencies.
+# FlexTag and FTML Quick Start
 
-For development purposes, you can install Flex Tag directly from the GitHub repository:
+This document provides syntax examples for FlexTag (container format) and FTML (data format) to help understand how they both work together.
 
-``` bash
-pip install git+https://github.com/darrenhaba/flextag.git
+## FlexTag Section Syntax
+
+FlexTag uses double bracket `[[]]` sections to encapsulate content:
+
+```
+[[section_id #tag1 #tag2 @path.to.something param="value"]]: content_type
+content goes here
+[[/section_id]]
 ```
 
-After installation, you can import Flex Tag in your Python scripts as shown in the examples below.
+### Section Components:
 
----
+- **Section ID**: `section_id` - Identifier for the section
+- **Tags**: `#tag1 #tag2` - Categorization labels (start with `#`)
+- **Paths**: `@path.to.something` - Hierarchical organization (start with `@`)
+- **Parameters**: `param="value"` - Key-value attributes
+- **Content Type**: `: content_type` - Format specifier (ftml, json, yaml, toml, raw)
+- **Content**: Everything between opening and closing markers
+- **Closing Tag**: `[[/section_id]]` - Must match opening ID
 
-<a id="quick-start"></a>
+### Multiple Tags and Paths:
 
-## Quick Start: LLM Chat Example
+```flextag
+[[config #production #v2 @app.backend @service.api ver="2.1" active=true]]: ftml
+// FTML content here.
+[[/config]]
+```
 
-1. **Step 1: Instructing the LLM**
+## FTML Data Syntax
 
-   You can start by pasting the following prompt into your LLM chat to instruct it to respond using Flex Tag format. The response will include a brief description and a simple Python code example.
+FTML is a data format with TOML-like syntax:
 
-   **Paste this prompt**:
+### Key-Value Pairs:
 
-   ```
-   Please respond in Flex Tag format.
-   
-   Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
-   
-   - Tags are written in lowercase, with spaces between words.
-   - Opening tags start with `[[-- ` followed by the tag name.
-   - Closing tags are `--]]`.
-   - Opening and closing tags must be on separate lines, no inline tags allowed.
-   
-   Please use the following tags:
-   - `text` for text responses.
-   - `python code` for python code responses.
-   
-   Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
-   ```
+```ftml
+key = "string value"
+number = 42
+boolean = true
+null_value = null
+```
 
-2. **Step 2: Example LLM Response**
+### List/Arrays:
 
-   After pasting the above instructions, you should receive a response similar to this:
+```ftml
+// Inline array
+tags = ["web", "api", "backend"]
 
+// Multiline array
+environments = [
+    "development",
+    "staging", 
+    "production"
+]
+```
+
+### Objects/Dict:
+
+```ftml
+// Inline object
+user = {name = "Alice", role = "admin"}
+
+// Multiline object
+database = {
+    host = "localhost",
+    port = 5432,
+    credentials = {
+        username = "app_user",
+        password = "secret"
+    }
+}
+```
+
+### Comments:
+
+```ftml
+// This is an FTML comment
+name = "MyApp"  // Inline comment
+```
+
+## Content Type Examples
+
+FlexTag can contain multiple content types:
+
+### FTML:
+
+```flextag
+[[config]]: ftml
+name = "MyApp"
+version = "1.0.0"
+features = ["auth", "api", "admin"]
+database = {
+    host = "localhost",
+    port = 5432
+}
+[[/config]]
+```
+
+### JSON:
+
+```flextag
+[[endpoints]]: json
+{
+    "users": "/api/users",
+    "products": "/api/products",
+    "orders": {
+        "create": "/api/orders/create",
+        "list": "/api/orders/list"
+    }
+}
+[[/endpoints]]
+```
+
+### YAML:
+
+```flextag
+[[deployment]]: yaml
+provider: aws
+regions:
+  - us-east-1
+  - eu-west-1
+resources:
+  cpu: 2
+  memory: 4G
+[[/deployment]]
+```
+
+### TOML:
+
+```flextag
+[[cache]]: toml
+ttl = 3600
+max_size = "2GB"
+
+[cache.redis]
+host = "redis.example.com"
+port = 6379
+[[/cache]]
+```
+
+### Raw:
+
+```flextag
+[[response #note]]: raw
+This is unstructured text content.
+It preserves formatting and whitespace exactly as written.
+
+This is great for text responses, code snippets, 
+markdown content, HTML, CSS, Javascript, etc,
+or any content where exact formatting matters.
+[[/response]]
+```
+
+```flextag
+[[script #python]]: raw
+import os
+
+print("This is a python script")
+if os.environ.get("DEBUG") == "true":
+    print("Debug mode enabled")
+[[/script]]
+```
+
+## Common FlexTag Patterns
+
+### Environment-specific Configs:
+
+```
+[[database #production]]: ftml
+host = "prod-db.company.com"
+[[/database]]
+
+[[database #development]]: ftml
+host = "localhost"
+[[/database]]
+```
+
+### Hierarchical Configs:
+
+```
+[[server @app.backend]]: ftml
+port = 8080
+[[/server]]
+
+[[client @app.frontend]]: ftml
+port = 3000
+[[/client]]
+```
+
+### Multiple Formats:
+
+```
+[[auth]]: ftml
+enabled = true
+provider = "oauth"
+[[/auth]]
+
+[[auth_endpoints]]: json
+{
+    "login": "/auth/login",
+    "logout": "/auth/logout" 
+}
+[[/auth_endpoints]]
+```
+
+## Filtering Syntax
+
+FlexTag supports filtering by tags, paths, and parameters:
+
+```python
+# Filter by tag
+production_configs = view.filter("#production")
+
+# Filter by path
+backend_configs = view.filter("@app.backend")
+
+# Filter by parameter
+v2_configs = view.filter('version="2.1"')
+
+# Combine filters
+prod_backend = view.filter("#production @app.backend")  # Implicit AND - like search engines
+backend_api = view.filter("#api @app.backend")          # Filter by both tag and path
+
+# Use OR explicitly when needed
+dev_or_staging = view.filter("#development OR #staging")  # Explicit OR
+
+# Complex combinations
+prod_backend_or_frontend = view.filter("#production @app.backend OR @app.frontend")
+cache_prod_staging = view.filter("@database.cache #production OR #staging")
+v2_configs = view.filter('#v2 OR ver>=2.0 ver<3.0')
+```
+
+## Converting to Dictionary
+
+FlexTag views can be converted to Python dictionaries:
+
+```python
+# Convert entire view
+all_configs = view.to_dict()
+
+# Access by ID
+app_config = all_configs['app_config']
+
+# Sections with the same ID become lists
+for db in all_configs['database']:
+    print(db['host'])
+```
+
+## Anonymous Sections (No ID)
+Sections without IDs are also supported:
+```python
+import flextag
+
+# Sections can have IDs or be anonymous
+unified_config = """
+[[with_id]]: ftml
+key = "Section with ID"
+[[/with_id]]
+
+[[]]: ftml
+key = "Section without ID"
+[[/]]
+
+[[]]: ftml
+key = "Section without ID"
+[[/]]
+"""
+
+view = flextag.load(string=unified_config)
+d = view.to_dict()
+print(d)
+# {'with_id': {'key': 'Section with ID'}, '': {'key': 'Section without ID'}}
+
+# Access a named section directly
+print(d['with_id'])
+# {'key': 'Section with ID'}
+
+# Anonymous sections are always in a list under the empty string key
+print(d[''])
+# {'key': 'Section without ID'}
+```
+
+## Complete Document Example
+
+```
+[[app_config #production @app]]: ftml
+name = "MyApp"
+version = "2.1.0"
+debug = false
+[[/app_config]]
+
+[[database #production @database.primary]]: yaml
+host: prod-db.company.com
+port: 5432
+[[/database]]
+
+[[cache #production @database.cache]]: json
+{"host": "redis.company.com", "port": 6379}
+[[/cache]]
+
+[[deploy_script #production @script.bash]]: raw
+#!/bin/bash
+docker build -t myapp .
+kubectl apply -f k8s/production/
+[[/deploy_script]]
+```
+
+Remember: FlexTag uses `[[...]]` for sections, while FTML uses `key = value` syntax with `{}` for objects and `[]` for arrays.
+
+## Parameter Type System
+
+FlexTag parameters in section headers support both automatic type inference and explicit type annotations.
+
+### Automatic Type Inference
+
+By default, parameter values are automatically converted to appropriate types:
+
+```flextag
+[[section_id 
+  name="admin"          // String (requires double quotes)
+  count=42              // Integer
+  score=3.14            // Float
+  active=true           // Boolean (true or false)
+  settings=null         // Null value
+]]
+```
+
+Types are inferred as follows:
+- `"value"` → String (double quotes required)
+- `42` → Integer
+- `3.14` → Float
+- `true` or `false` → Boolean
+- `null` → Null
+
+### Explicit Type Annotations
+
+For more control, you can explicitly specify parameter types using the colon syntax:
+
+```flextag
+[[section_id 
+  name:str="admin"      // Explicitly a string
+  count:int=42          // Explicitly an integer
+  score:float=3.14      // Explicitly a float
+  active:bool=true      // Explicitly a boolean
+]]
+```
+
+Explicit type annotations are useful when:
+- You want to enforce a specific type
+- You need to override the automatic type inference
+- You need type conversion (e.g., `count:float=42` gives `42.0`)
+
+### Supported Types
+
+FlexTag supports these parameter types:
+
+| Type     | Aliases     | Examples                 |
+|----------|-------------|--------------------------|
+| `str`    | `string`    | `name:str="John"`        |
+| `int`    | `integer`   | `count:int=42`           |
+| `float`  |             | `score:float=3.14`       |
+| `bool`   | `boolean`   | `active:bool=true`       |
+| `null`   |             | `value:null=null`        |
+
+### Nullable Types
+
+Add a question mark after the type to allow null values:
+
+```flextag
+[[section_id
+  name:str="John"       // Must be a string, cannot be null
+  age:int?=null         // Can be integer or null
+  score:float?=3.14     // Can be float or null
+]]
+```
+
+### Type Conversion
+
+Explicit type annotations can convert between compatible types:
+
+```flextag
+[[section_id
+  count:int="42"        // String "42" converted to integer 42
+  id:str=123            // Number 123 converted to string "123"
+  amount:float=42       // Integer 42 converted to float 42.0
+]]
+```
+
+### Working with Types in Code
+
+When accessing parameters in Python code, the types are preserved:
+
+```python
+import flextag
+
+data = '''
+[[config name:str="app" version:float=1.5 active:bool=true]]
+Settings here
+[[/config]]
+'''
+
+view = flextag.load(string=data)
+params = view.sections[0].parameters
+
+print(type(params['name']))    # <class 'str'>
+print(type(params['version'])) # <class 'float'>
+print(type(params['active']))  # <class 'bool'>
+```
+
+### Best Practices
+
+1. **Use Automatic Inference** for simple cases where the type is obvious
+2. **Use Explicit Types** when type safety is important or conversion is needed
+3. **Use Nullable Types** (`type?`) when parameters might be null
+4. **Be Consistent** with your approach to typing across your document
+
+## ⚠️ EXPERIMENTAL WARNING ⚠️
+
+> The FlexTag Schema System is highly experimental. It will be refined and likely completely rebuilt in future versions.
+
+# FlexTag and FTML Schema Systems
+
+FlexTag uses two distinct but complementary schema systems:
+
+1. **FlexTag Schema**: Controls section structure and metadata
+2. **FTML Schema**: Validates structured data within FTML sections
+
+## FlexTag Schema System
+
+The FlexTag schema system provides validation for the **document structure**:
+
+- Section **order and repetition**
+- Required **metadata** (IDs, tags, paths, parameters)
+- Section **content types** (raw or ftml)
+
+### FlexTag Schema Definition
+
+A FlexTag schema is defined in a special section at the start of a document:
+
+```flextag
+[[]]: schema
+[notes #draft /]?: raw          # Optional section with specific tag
+[config #settings]: ftml        # Required section with FTML content
+[entry #data @items /]*: ftml   # Zero or more sections with specific metadata
+[[/]]
+```
+
+### FlexTag Schema Syntax
+
+Each line defines a rule for a section:
+
+```
+[section_id #tags @paths param=val /]?: content_type
+```
+
+With repetition modifiers:
+- No symbol: Exactly one required occurrence
+- `?`: Optional (0 or 1 occurrence)
+- `*`: Zero or more occurrences
+- `+`: One or more occurrences
+
+## FTML Schema System
+
+The FTML schema system validates **structured data** within FTML sections:
+
+- **Type safety** for fields (str, int, float, bool, etc.)
+- **Constraints** for values (min, max, pattern, etc.)
+- **Unions** for multiple allowed types
+- **Default values** for optional fields
+
+### FTML Schema Definition
+
+FTML schemas can be defined in a schema section:
+
+```flextag
+[[]]: schema
+[config]: ftml
+  name: str<min_length=2>
+  age?: int<min=0> = 18
+  tags: [str]<min=1>
+  address: {
+    street: str,
+    city: str,
+    zip: str<pattern="[0-9]{5}">
+  }
+[[/]]
+```
+
+### FTML Schema Types
+
+FTML schemas support various types:
+
+- **Scalar types**: `str`, `int`, `float`, `bool`, `null`, `any`, `date`, `time`, etc.
+- **Collection types**: Lists `[type]` and objects `{field: type}`
+- **Constraints**: In angle brackets `<min=0, max=100>`
+- **Union types**: With pipe operator `str | int | null`
+- **Optional fields**: With question mark `field?:`
+- **Default values**: With equals sign `field: type = default`
+
+## Working with Both Schema Systems
+
+When using FlexTag with FTML content:
+
+1. **Define FlexTag schema** to validate document structure:
    ```flextag
-   [[-- text
-   Here is a simple Python script.
-   --]]
-
-   [[-- python code
-   print("Hello, World!")
-   --]]
+   [[]]: schema
+   [config]: ftml
+   [logs]*: raw
+   [[/]]
    ```
 
-3. **Step 3: Parsing the Response**
+2. **Define FTML schema** to validate structured data:
+   ```flextag
+   [[]]: schema
+   [config]: ftml
+   // FTML schema here
+   user: {
+     name: str,
+     age: int<min=0>
+   }
+   [[/]]
+   ```
 
-   - Before we begin, ensure you have Flex Tag installed. If you haven't installed it yet, refer to the [Installation](#installation) section above.
-
-   - Now, let's create a Python script that converts the example Flex Tag response from Step 2 into a dictionary. After converting, we'll print out both the `text` and `python code` sections.
+3. **Create sections** following the schemas:
+   ```flextag
+   [[config]]: ftml
+   user: {
+     name: "John",
+     age: 30
+   }
+   [[/config]]
    
-   **Example Script**:
+   [[logs]]: raw
+   System started at 2023-01-01
+   [[/logs]]
+   ```
+
+## Validation Process
+
+When you call `FlexTag.load(..., validate=True)`, the system:
+
+1. Validates the FlexTag document structure against the FlexTag schema
+2. For each FTML section, validates its content against the FTML schema (if provided)
+
+This layered approach allows comprehensive validation from document structure down to individual data fields.
+
+
+
+
+
+
+## Deprecated Features
+
+### FlexMap and FlexPoint
+
+The `FlexMap` and `FlexPoint` classes, along with the `to_flexmap()` method, are deprecated and should not be used in new code. These features create a complex nested structure that is difficult to work with.
+
+Instead, use one of these recommended approaches:
+
+1. **Convert to Dictionary**: Use `view.to_dict()` to get a standard Python dictionary representation of your sections.
 
    ```python
-   import flextag
-   
-   print("Welcome to the FlexTag Demo!")
-   print("This demo will show you how to parse a FlexTag-formatted string into a dictionary.\n")
-   
-   print("Step 1: Here's our example FlexTag-formatted string:")
-   # Example Flex Tag response
-   flex_response = '''
-   [[-- text
-   Here is a simple Python script.
-   --]]
-   
-   [[-- python code
-   print("Hello, World!")
-   --]]
-   '''
-   print(flex_response)
-   
-   print("\nStep 2: Now, let's convert this FlexTag string to a dictionary and see its contents:")
-   # Convert Flex Tag to dictionary
-   flex_dict = flextag.flex_to_dict(flex_response)
-   
-   # Print the text and python code sections from the dictionary
-   print("Text content:", flex_dict.get('text', 'No text response available'))
-   print("Python code content:", flex_dict.get('python code', 'No code response available'))
-   
-   print("\nThat's it! We've successfully parsed a FlexTag string into a dictionary.")
-   print("You can now easily access different parts of the response using dictionary keys.")   
+   data = view.to_dict()
    ```
 
-   In this script:
-   - `flex_response` is the Flex Tag formatted response we received from the LLM in Step 2.
-   - The `flex_to_dict` function converts the Flex Tag response into a Python dictionary.
-   - Each section of the response is accessible by its tag (e.g., `text`, `python code`) as dictionary keys.
-
-    This script demonstrates how to parse a Flex Tag formatted string into a dictionary and access its contents. It provides a step-by-step walkthrough of the process, making it easy for users to understand how Flex Tag works.
-
-<a id="chatgpt-example"></a>
-
-## API Integration: ChatGPT Example
-
-1. **Step 1: Set Up the API Key**
-   - Make sure you have your OpenAI API key. You can get one by signing up at [OpenAI](https://beta.openai.com/signup/).
-
-2. **Step 2: Install Required Packages**
-   - You'll need the `openai` Python package to interact with the ChatGPT API:
-   - You'll need the `flextag` Python package to parse and organize multiple responses from the LLM, converting them into a structured dictionary format for easier handling.
-   
-  ```bash
-  pip install openai flextag
-  ```
-
-3. **Step 3: Example API Script**
-   - Use the following Python script to interact with the ChatGPT API. This script sends a request for a response in Flex Tag format and converts the response into a Python dictionary.
+2. **Iterate Over Sections**: Directly iterate over the sections in the view.
 
    ```python
-   import os
-
-   import openai
-   import flextag
-   
-   # Set your API key
-   os.environ['OPENAI_API_KEY'] = 'your-openai-api-key'
-
-   # Initialize the OpenAI client
-   client = openai.OpenAI()
-   
-   print("1. Preparing the request to the language model...")
-   # Example request to GPT-4 with updated Flex Tag format
-   response = client.chat.completions.create(
-   model="gpt-4",
-   messages=[
-   {"role": "system", "content": "You are a helpful assistant that responds in Flex Tag format."},
-   {"role": "user", "content": """
-    Please respond in Flex Tag format.
-
-    Flex Tag is a system where different sections of content are separated using custom tags. The format is as follows:
-
-    - Tags are written in lowercase, with spaces between words.
-       - Opening tags start on a new line `[[-- tag name here`.
-       - The content goes is between the opening and closing tags.
-       - closing tags start on a new line `--]]`.
-   - Add an empty line between end tags and the next start tag.
-
-
-    Please use the following tags:
-    - `text` for text responses.
-    - `python code` for python code responses.
-
-    Provide a brief text description (under 50 chars) and a Python code example that prints "Hello, World!" in one line.
-   """}
-   ],
-   max_tokens=300,
-   temperature=0.7
-   )
-   
-   print("\n2. Received response from the language model.")
-   
-   # Get the text part of the response
-   flex_response = response.choices[0].message.content.strip()
-   print("\n3. Raw Flex Tag response:")
-   print(flex_response)
-   
-   print("\n4. Converting Flex Tag response to a dictionary...")
-   # Convert the Flex Tag response to a dictionary
-   flex_dict = flextag.flex_to_dict(flex_response)
-   
-   print("\n5. Flex Tag response converted to dictionary:")
-   print(flex_dict)
-   
-   # Print the text and code sections
-   print("\n6. Accessing specific sections from the response:")
-   print("Text:", flex_dict.get('text', 'No text response available'))
-   print("Python Code:", flex_dict.get('python code', 'No code response available'))
-   
-   print("\n7. Demo complete. Flextag successfully parsed the LLM response into separate sections.")
-   
+   for section in view.sections:
+       print(section.id, section.content)
    ```
 
-4. **Step 4: Running the Script**
-   - After running the script, you should see the Flex Tag response from ChatGPT, parsed into a Python dictionary with the text and code sections printed.
+3. **Filter and Query**: Use the filtering capabilities to get just the sections you need.
 
-<a id="api-reference"></a>
+   ```python
+   filtered = view.filter("#production @app.backend")
+   ```
 
-# API Reference
+### Help Classes (Already Removed)
 
-## Functions
+The following help-related classes have already been removed from newer versions of FlexTag:
 
-### flex_to_dict
+- `FlexHelpBase`: Base class with shared table formatting logic
+- `SectionHelp`: Generated formatted help text for Section objects
+- `FlexPointHelp`: Generated structured information about FlexPoint objects
+- `FlexMapHelp`: Produced tabular summaries of FlexMap contents
 
-```python
-def flex_to_dict(flex_tag_string: str) -> OrderedDict:
-```
-
-Converts a Flex Tag formatted string into an OrderedDict.
-
-#### Parameters
-
-- `flex_tag_string` (str): A string in Flex Tag format.
-
-#### Returns
-
-- `OrderedDict`: A dictionary representation of the Flex Tag content.
-
-#### Example
+These classes supported the `.help` property that was available on FlexMap and FlexPoint objects, which would generate formatted text output showing the structure, available sections, and access paths. Usage looked like:
 
 ```python
-import flextag
-
-flex_string = """
-[[-- text
-Hello, World!
---]]
-
-[[-- python code
-print("Hello, World!")
---]]
-"""
-
-result = flextag.flex_to_dict(flex_string)
-print(result)
-# Output: OrderedDict([('text', 'Hello, World!'), ('python code', 'print("Hello, World!")')])
+# Old usage pattern (no longer supported)
+fm = view.to_flexmap()
+print(fm.help)  # Would print a table of available paths
+print(fm["items"].help)  # Would print info about the FlexPoint at "items"
 ```
 
-### dict_to_flex
+The FlexMap/FlexPoint approach and all associated help functionality will be completely removed in a future version.
 
-```python
-def dict_to_flex(tag_dict: Union[OrderedDict, dict]) -> str:
-```
+## Contributing
 
-Converts a nested OrderedDict or dict back into a Flex Tag formatted string.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-#### Parameters
+## License
 
-- `tag_dict` (Union[OrderedDict, dict]): A dictionary representation of Flex Tag content.
-
-#### Returns
-
-- `str`: A Flex Tag formatted string.
-
-#### Example
-
-```python
-import flextag
-from collections import OrderedDict
-
-tag_dict = OrderedDict([
-    ('text', 'Hello, World!'),
-    ('python code', 'print("Hello, World!")')
-])
-
-flex_string = flextag.dict_to_flex(tag_dict)
-print(flex_string)
-# Output:
-# [[-- text
-# Hello, World!
-# --]]
-#
-# [[-- python code
-# print("Hello, World!")
-# --]]
-```
-
-### flex_to_json
-
-```python
-def flex_to_json(flex_tag_string: str, indent: Optional[int] = None) -> str:
-```
-
-Converts a Flex Tag formatted string to a JSON string.
-
-#### Parameters
-
-- `flex_tag_string` (str): A string in Flex Tag format.
-- `indent` (Optional[int]): Number of spaces for indentation in the resulting JSON string. If None, the JSON will be compact. Defaults to None.
-
-#### Returns
-
-- `str`: A JSON formatted string representing the input Flex Tag structure.
-
-#### Example
-
-```python
-import flextag
-
-flex_string = """
-[[-- text
-Hello, World!
---]]
-
-[[-- python code
-print("Hello, World!")
---]]
-"""
-
-json_string = flextag.flex_to_json(flex_string, indent=2)
-print(json_string)
-# Output:
-# {
-#   "text": "Hello, World!",
-#   "python code": "print(\"Hello, World!\")"
-# }
-```
-
-### json_to_flex
-
-```python
-def json_to_flex(json_string: str) -> str:
-```
-
-Converts a JSON string to a Flex Tag formatted string.
-
-#### Parameters
-
-- `json_string` (str): A JSON formatted string.
-
-#### Returns
-
-- `str`: A Flex Tag formatted string representing the input JSON structure.
-
-#### Example
-
-```python
-import flextag
-
-json_string = '{"text": "Hello, World!", "python code": "print(\\"Hello, World!\\")"}'
-
-flex_string = flextag.json_to_flex(json_string)
-print(flex_string)
-# Output:
-# [[-- text
-# Hello, World!
-# --]]
-#
-# [[-- python code
-# print("Hello, World!")
-# --]]
-```
-
-<a id="converting"></a>
-
-## Converting to Other Formats
-
-Flex Tag directly supports conversion to and from JSON format using the `flex_to_json` and `json_to_flex` functions. For other formats like YAML or TOML, you can easily convert the resulting dictionary using third-party packages.
-
-### YAML Example (requires `pyyaml`):
-```python
-import yaml
-import flextag
-
-flex_string = "... your Flex Tag string ..."
-flex_dict = flextag.flex_to_dict(flex_string)
-yaml_string = yaml.dump(flex_dict)
-```
-
-### TOML Example (requires `toml`):
-```python
-import toml
-import flextag
-
-flex_string = "... your Flex Tag string ..."
-flex_dict = flextag.flex_to_dict(flex_string)
-toml_string = toml.dumps(flex_dict)
-```
-
-Note: For YAML and TOML conversions, you'll need to install the respective packages (`pyyaml` for YAML and `toml` for TOML) as they are not part of the Python standard library.
-
----
-
-<a id="standards"></a>
-
-## Flex Tag System Standards
-
-**Flex Tag** is designed to be a flexible yet unique tagging system, using tags that are distinct from any other tags used in common scripting or programming languages. This ensures that Flex Tag's tags are never confused with language-specific syntax, preventing interference when AI generates code.
-
-### Standards
-
-#### 1. Tag Names
-- Tags should be written in **lowercase**, with **spaces encouraged** for simplicity.
-- The system is **case-insensitive**, but **lowercase preferred**.
-- **Spaces**, **underscores**, and **dashes** are allowed, but **spaces are preferred**.
-
-#### 2. Tag Structure
-- **Opening tags**: `[[-- tag name` must appear on a new line.
-- **Closing tags**: `--]]` must also appear on a new line.
-- Opening and closing tags should be the only content on their respective lines.
-
-#### 3. Multi-Language Support
-- Flex Tag can be used across multiple programming languages, allowing it to work without conflicting with existing language syntax.
-
-<a id="feedback"></a>
-
-## Collaboration and Feedback
-
-Flex Tag is currently in early beta, and we value your input to help shape its development. Whether you have suggestions for syntax improvements, feature requests, or unique use cases that could benefit from Flex Tag, we encourage you to participate in the project's evolution.
-
-If you encounter any issues, have ideas for enhancements, or want to discuss potential applications, please open a GitHub Issue on our repository. Your feedback is crucial in refining Flex Tag to meet a wide range of needs in the AI and data processing communities.
-
-We're committed to creating a tool that's both powerful and user-friendly, and your experiences and insights are invaluable in achieving this goal. Join us in developing Flex Tag into a robust solution for structured AI responses and data handling.
+This project is licensed under the MIT License - see the LICENSE file for details.
