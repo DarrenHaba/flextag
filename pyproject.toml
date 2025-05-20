@@ -1,21 +1,35 @@
 [tool.poetry]
 name = "flextag"
-version = "0.2.2"
-description = "A lightweight markup language for structured content with powerful section-based organization, metadata filtering, and validation capabilities."
+version = "0.3.0a1"
+description = "Python package for structuring and parsing complex AI responses using a flexible tagging system."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
 exclude = ["demo", "dev"]
-repository = "https://github.com/DarrenHaba/flextag"
-homepage = "https://github.com/DarrenHaba/flextag"
+packages = [{ include = "flextag", from = "src" }]
+license = "MIT"
+
+[tool.poetry.urls]
+"Homepage" = "https://github.com/yourusername/flextag"
+"Repository" = "https://github.com/yourusername/flextag"
+"Bug Tracker" = "https://github.com/yourusername/flextag/issues"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
+pytest-cov = "^6.0.0"
+tomli = "^2.1.0"
+tomli-w = "^1.1.0"
+pyyaml = "^6.0.2"
+duckdb = "^1.1.3"
+numpy = "^2.1.3"
+ftml = "^0.1.0a1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.10.0"
 flake8 = "^7.1.1"
 pre-commit = "^4.0.1"
 flake8-docstrings = "^1.7.0"
+openai = "^1.52.2"
+notebook = "^7.2.2"
 
 [build-system]
 requires = ["poetry-core"]
