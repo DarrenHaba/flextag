@@ -1,4 +1,0 @@
-- Adding encoding detection/validation
-- Supporting text content transformation (base64, etc.)
-- Adding checksums for content validation
-- Supporting more complex encoding scenarios
