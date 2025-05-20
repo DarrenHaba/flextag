@@ -24,8 +24,8 @@ from .flextag import (
 from .flextag import logger
 
 # Version constants
-FLEXTAG_VERSION = "0.3.0a1"  # The FlexTag specification version
-PACKAGE_VERSION = "0.3.0a1"  # The package version - update with each release
+FLEXTAG_VERSION = "0.3.0"  # The FlexTag specification version
+PACKAGE_VERSION = "0.3.0"  # The package version - update with each release
 
 
 def get_flextag_version():

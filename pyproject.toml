@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flextag"
-version = "0.3.0a1"
+version = "0.3.0"
 description = "A lightweight markup language for structured content with powerful section-based organization, metadata filtering, and validation capabilities."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
