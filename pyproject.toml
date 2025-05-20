@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "flextag"
 version = "0.2.2"
-description = "Python package for structuring and parsing complex AI responses using a flexible tagging system."
+description = "A lightweight markup language for structured content with powerful section-based organization, metadata filtering, and validation capabilities."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
 exclude = ["demo", "dev"]
