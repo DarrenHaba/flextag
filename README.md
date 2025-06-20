@@ -4,7 +4,7 @@ FlexTag is a bracket-based markup language with sections, schema validation, and
 
 ## ⚠️ EXPERIMENTAL WARNING ⚠️
 
-> FlexTag is currently in the alpha stage (v0.3.0a1) with experimental syntax that may change significantly between versions. DO NOT use in production systems or with critical data until a stable 1.0 release. And there are still missing features, and you will find bugs. The purpose of this release is to test and refine the syntax.**
+> FlexTag is currently in the alpha stage (v0.3.0a1) with experimental syntax that may change significantly between versions. Do not use in production systems or with critical data until a stable 1.0 release.
 
 ## Installation
 
