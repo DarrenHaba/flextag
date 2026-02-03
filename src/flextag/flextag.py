@@ -2010,9 +2010,10 @@ class FlexTag:
         filter_query: str | None = None,
         validate: bool = True,
         settings: FlexTagSettings | None = None,
+        recursive: bool = True,
     ) -> FlexView:
         inst = cls(settings=settings)
-        sources = inst._gather_sources(path, string, dir)
+        sources = inst._gather_sources(path, string, dir, recursive)
         containers = []
         for src in sources:
             src_path = src if os.path.isfile(src) else "<string>"
@@ -2030,6 +2031,7 @@ class FlexTag:
         path: str | list[str] | None,
         string: str | list[str] | None,
         dir: str | list[str] | None,
+        recursive: bool = True,
     ) -> list[str]:
         out = []
         if path:
@@ -2044,20 +2046,25 @@ class FlexTag:
                 out.extend(string)
         if dir:
             if isinstance(dir, str):
-                out.extend(self._dir_files(dir))
+                out.extend(self._dir_files(dir, recursive))
             else:
                 for d in dir:
-                    out.extend(self._dir_files(d))
+                    out.extend(self._dir_files(d, recursive))
         return out
 
-    def _dir_files(self, directory: str) -> list[str]:
+    def _dir_files(self, directory: str, recursive: bool = True) -> list[str]:
         res = []
         if not os.path.isdir(directory):
             return res
-        for fn in os.listdir(directory):
-            if fn.endswith(".flextag") or fn.endswith(".ft"):
-                full_path = os.path.join(directory, fn)
-                res.append(full_path)
+        if recursive:
+            for root, _, files in os.walk(directory):
+                for fn in files:
+                    if fn.endswith(".flextag") or fn.endswith(".ft"):
+                        res.append(os.path.join(root, fn))
+        else:
+            for fn in os.listdir(directory):
+                if fn.endswith(".flextag") or fn.endswith(".ft"):
+                    res.append(os.path.join(directory, fn))
         return res
 
     def _parse_source(self, src: str, source_name: str) -> Container:

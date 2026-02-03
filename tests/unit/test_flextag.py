@@ -293,5 +293,83 @@ class TestFlexTagFilter(unittest.TestCase):
         self.assertIn("three", ids)
 
 
+class TestRecursiveDirectoryLoading(unittest.TestCase):
+    """Tests for recursive directory loading."""
+
+    def setUp(self):
+        """Create a temporary directory structure with FlexTag files."""
+        self.temp_dir = tempfile.mkdtemp()
+
+        # Create root level file
+        with open(os.path.join(self.temp_dir, "root.flextag"), "w") as f:
+            f.write("[[root_section]]\nRoot content\n[[/root_section]]")
+
+        # Create subdirectory with file
+        sub_dir = os.path.join(self.temp_dir, "subdir")
+        os.makedirs(sub_dir)
+        with open(os.path.join(sub_dir, "sub.ft"), "w") as f:
+            f.write("[[sub_section]]\nSub content\n[[/sub_section]]")
+
+        # Create nested subdirectory with file
+        nested_dir = os.path.join(sub_dir, "nested")
+        os.makedirs(nested_dir)
+        with open(os.path.join(nested_dir, "nested.flextag"), "w") as f:
+            f.write("[[nested_section]]\nNested content\n[[/nested_section]]")
+
+    def tearDown(self):
+        """Clean up temporary directory."""
+        import shutil
+
+        shutil.rmtree(self.temp_dir)
+
+    def test_recursive_true_default(self):
+        """Test that recursive=True is the default and finds all files."""
+        view = FlexTag.load(dir=self.temp_dir, validate=False)
+        ids = [s.id for s in view.sections]
+        self.assertEqual(len(view.sections), 3)
+        self.assertIn("root_section", ids)
+        self.assertIn("sub_section", ids)
+        self.assertIn("nested_section", ids)
+
+    def test_recursive_false(self):
+        """Test that recursive=False only finds root level files."""
+        view = FlexTag.load(dir=self.temp_dir, recursive=False, validate=False)
+        ids = [s.id for s in view.sections]
+        self.assertEqual(len(view.sections), 1)
+        self.assertIn("root_section", ids)
+        self.assertNotIn("sub_section", ids)
+        self.assertNotIn("nested_section", ids)
+
+    def test_recursive_with_multiple_dirs(self):
+        """Test recursive loading with multiple directories."""
+        # Create another temp dir
+        other_dir = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(other_dir, "other.ft"), "w") as f:
+                f.write("[[other_section]]\nOther content\n[[/other_section]]")
+
+            view = FlexTag.load(dir=[self.temp_dir, other_dir], validate=False)
+            ids = [s.id for s in view.sections]
+            self.assertEqual(len(view.sections), 4)
+            self.assertIn("other_section", ids)
+        finally:
+            import shutil
+
+            shutil.rmtree(other_dir)
+
+    def test_both_extensions_found(self):
+        """Test that both .flextag and .ft files are found."""
+        view = FlexTag.load(dir=self.temp_dir, validate=False)
+        # root.flextag, sub.ft, nested.flextag
+        extensions = []
+        for c in view.containers:
+            if c.source_name.endswith(".flextag"):
+                extensions.append(".flextag")
+            elif c.source_name.endswith(".ft"):
+                extensions.append(".ft")
+        self.assertIn(".flextag", extensions)
+        self.assertIn(".ft", extensions)
+
+
 if __name__ == "__main__":
     unittest.main()

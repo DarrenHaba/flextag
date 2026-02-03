@@ -294,6 +294,29 @@ db_sections = [s for s in view.sections if s.id == "database"]
 print(len(db_sections))  # 2
 ```
 
+### Loading from Files and Directories
+
+```python
+import flextag
+
+# Load from a single file
+view = flextag.load(path="config.flextag")
+
+# Load from multiple files
+view = flextag.load(path=["config.flextag", "settings.ft"])
+
+# Load from a directory (recursively searches subdirectories by default)
+view = flextag.load(dir="plugins/")
+
+# Load from directory without recursion (top-level only)
+view = flextag.load(dir="plugins/", recursive=False)
+
+# Load from multiple directories
+view = flextag.load(dir=["plugins/indicators/", "plugins/drawings/"])
+```
+
+Both `.flextag` and `.ft` file extensions are recognized.
+
 ## Complete Document Example
 
 ```

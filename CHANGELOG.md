@@ -8,6 +8,7 @@
 
 ### Added
 - `binary` content type for raw byte data (returns `bytes` instead of `str`)
+- `recursive` parameter for `load()` - recursively search subdirectories when using `dir=` (default: True)
 - Multi-Python version CI testing (3.10, 3.11, 3.12, 3.13)
 - Cross-platform CI testing (Ubuntu, Windows, macOS)
 - `noxfile.py` for local multi-version testing

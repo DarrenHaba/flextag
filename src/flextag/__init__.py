@@ -43,6 +43,7 @@ def load(
     filter_query: str | None = None,
     validate: bool = True,
     settings: FlexTagSettings | None = None,
+    recursive: bool = True,
 ) -> FlexView:
     """
     Parse FlexTag data from files, strings, or directories.
@@ -54,6 +55,8 @@ def load(
         filter_query: Optional query to filter containers after loading
         validate: Whether to validate against any embedded schema
         settings: Optional settings to control parsing behavior
+        recursive: Whether to recursively search subdirectories when using dir=
+                   (default: True)
 
     Returns:
         A FlexView object containing the parsed sections and containers
@@ -70,6 +73,7 @@ def load(
         filter_query=filter_query,
         validate=validate,
         settings=settings,
+        recursive=recursive,
     )
 
 
