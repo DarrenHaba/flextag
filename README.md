@@ -4,7 +4,7 @@ FlexTag is a bracket-based markup language with sections, schema validation, and
 
 ## ⚠️ EXPERIMENTAL WARNING ⚠️
 
-> FlexTag is currently in the alpha stage (v0.3.0a1) with experimental syntax that may change significantly between versions. Do not use in production systems or with critical data until a stable 1.0 release.
+> FlexTag is currently in the alpha stage (v0.4.0a1) with experimental syntax that may change significantly between versions. Do not use in production systems or with critical data until a stable 1.0 release.
 
 ## Installation
 
@@ -34,7 +34,7 @@ content goes here
 - **Tags**: `#tag1 #tag2` - Categorization labels (start with `#`)
 - **Paths**: `@path.to.something` - Hierarchical organization (start with `@`)
 - **Parameters**: `param="value"` - Key-value attributes
-- **Content Type**: `: content_type` - Format specifier (ftml, json, yaml, toml, raw)
+- **Content Type**: `: content_type` - Format specifier (ftml, json, yaml, toml, text, binary)
 - **Content**: Everything between opening and closing markers
 - **Closing Tag**: `[[/section_id]]` - Must match opening ID
 
@@ -157,27 +157,37 @@ port = 6379
 [[/cache]]
 ```
 
-### Raw:
+### Text:
 
 ```flextag
-[[response #note]]: raw
+[[response #note]]: text
 This is unstructured text content.
 It preserves formatting and whitespace exactly as written.
 
-This is great for text responses, code snippets, 
+This is great for text responses, code snippets,
 markdown content, HTML, CSS, Javascript, etc,
 or any content where exact formatting matters.
 [[/response]]
 ```
 
 ```flextag
-[[script #python]]: raw
+[[script #python]]: text
 import os
 
 print("This is a python script")
 if os.environ.get("DEBUG") == "true":
     print("Debug mode enabled")
 [[/script]]
+```
+
+### Binary:
+
+```flextag
+[[data]]: binary
+Raw byte content here - returns bytes instead of str.
+Useful for embedding binary data that needs to preserve
+exact byte values through surrogateescape encoding.
+[[/data]]
 ```
 
 ## Common FlexTag Patterns
@@ -317,7 +327,7 @@ port: 5432
 {"host": "redis.company.com", "port": 6379}
 [[/cache]]
 
-[[deploy_script #production @script.bash]]: raw
+[[deploy_script #production @script.bash]]: text
 #!/bin/bash
 docker build -t myapp .
 kubectl apply -f k8s/production/
@@ -450,7 +460,7 @@ The FlexTag schema system provides validation for the **document structure**:
 
 - Section **order and repetition**
 - Required **metadata** (IDs, tags, paths, parameters)
-- Section **content types** (raw or ftml)
+- Section **content types** (text, binary, or markup types like ftml)
 
 ### FlexTag Schema Definition
 
@@ -458,7 +468,7 @@ A FlexTag schema is defined in a special section at the start of a document:
 
 ```flextag
 [[]]: schema
-[notes #draft /]?: raw          # Optional section with specific tag
+[notes #draft /]?: text         # Optional section with specific tag
 [config #settings]: ftml        # Required section with FTML content
 [entry #data @items /]*: ftml   # Zero or more sections with specific metadata
 [[/]]
@@ -524,7 +534,7 @@ When using FlexTag with FTML content:
    ```flextag
    [[]]: schema
    [config]: ftml
-   [logs]*: raw
+   [logs]*: text
    [[/]]
    ```
 
@@ -549,7 +559,7 @@ When using FlexTag with FTML content:
    }
    [[/config]]
    
-   [[logs]]: raw
+   [[logs]]: text
    System started at 2023-01-01
    [[/logs]]
    ```
