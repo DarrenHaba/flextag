@@ -8,26 +8,16 @@ class TestParameters:
     def parser(self):
         return FlexTag()
 
-    def test_parameter_inheritance(self, parser):
-        """Test parameter inheritance and overrides"""
-        content = """[[]]: defaults
-[default_param1="default1" default_param2="default2" shared="default" /]
-[[/]]
-
-[[shared="override" local="value"]]
+    def test_parameter_basics(self, parser):
+        """Test basic parameter parsing"""
+        content = """[[#section shared="override" local="value"]]
 content
 [[/]]"""
 
         container = parser._parse_source(content, "<string>")
         section = container.sections[0]
 
-        assert section.raw_parameters == {"shared": "override", "local": "value"}
-        assert section.parameters == {
-            "default_param1": "default1",
-            "default_param2": "default2",
-            "shared": "override",
-            "local": "value",
-        }
+        assert section.parameters == {"shared": "override", "local": "value"}
 
     @pytest.mark.parametrize(
         "param_str,expected_value,expected_type",
@@ -44,9 +34,9 @@ content
         self, parser, param_str, expected_value, expected_type
     ):
         """Test parameter type conversion for different formats"""
-        data = f"""[[section {param_str}]]
+        data = f"""[[#section {param_str}]]
 content
-[[/section]]"""
+[[/]]"""
 
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
@@ -57,9 +47,9 @@ content
 
     def test_multiple_parameter_types(self, parser):
         """Test parsing multiple parameters with different types"""
-        data = """[[section int_param=42 float_param=3.14 str_param="hello" bool_param=true null_param=null]]
+        data = """[[#section int_param=42 float_param=3.14 str_param="hello" bool_param=true null_param=null]]
 content
-[[/section]]"""
+[[/]]"""
 
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
@@ -74,7 +64,7 @@ content
 
     def test_parameter_edge_cases(self, parser):
         """Test parameter parsing edge cases"""
-        data = """[[section empty="" spaces="  spaced  " quotes='"quoted"' /]]"""
+        data = """[[#section empty="" spaces="  spaced  " quotes='"quoted"' /]]"""
 
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
@@ -85,7 +75,7 @@ content
 
     def test_parameter_type_edge_cases(self, parser):
         """Test parameter parsing for white space around boolean, null, int, and float values"""
-        data = """[[section bool_true=true    null_val=null    int_val=123    float_val=1.23  /]]"""
+        data = """[[#section bool_true=true    null_val=null    int_val=123    float_val=1.23  /]]"""
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 
@@ -97,7 +87,7 @@ content
 
     def test_parameter_split_edge_cases(self, parser):
         """Test parameter parsing for white space around boolean, null, int, and float values"""
-        data = """[[section bool_true="true"    null_val="null"    int_val=123    float_val=1.23  /]]"""
+        data = """[[#section bool_true="true"    null_val="null"    int_val=123    float_val=1.23  /]]"""
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 

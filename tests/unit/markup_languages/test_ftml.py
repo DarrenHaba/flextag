@@ -11,12 +11,12 @@ class TestFTMLWithFlexTag:
     def test_simple_ftml_parsing(self):
         """Test basic FTML parsing within FlexTag sections."""
         test_string = """
-[[simple_config]]: ftml
+[[#simple_config]]: ftml
 name = "Simple Config"
 debug = true
 port = 8080
 version = null
-[[/simple_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -24,7 +24,7 @@ version = null
         # Test section parsing
         assert len(view.sections) == 1
         section = view.sections[0]
-        assert section.id == "simple_config"
+        assert "#simple_config" in section.tags
         assert section.type_name == "ftml"
 
         # Test content parsing
@@ -38,13 +38,13 @@ version = null
     def test_ftml_with_comments(self):
         """Test FTML comment syntax with // instead of #."""
         test_string = """
-[[commented_config]]: ftml
+[[#commented_config]]: ftml
 // This is a FTML comment
 name = "Config with Comments"
 // Another comment
 debug = true
 port = 8080  // Inline comment
-[[/commented_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -58,7 +58,7 @@ port = 8080  // Inline comment
     def test_ftml_collections_lists_and_objects(self):
         """Test FTML collections: lists and objects."""
         test_string = """
-[[collections_test]]: ftml
+[[#collections_test]]: ftml
 // Inline list
 tags = ["ai", "config", "ftml"]
 
@@ -91,7 +91,7 @@ config = {
     },
     features = ["logging", "metrics", "alerts"]
 }
-[[/collections_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -122,7 +122,7 @@ config = {
     def test_ftml_data_types(self):
         """Test FTML data type parsing."""
         test_string = """
-[[types_test]]: ftml
+[[#types_test]]: ftml
 // String types
 basic_string = "I'm a string"
 empty_string = ""
@@ -151,7 +151,7 @@ user_profile = {
     preferences = ["email", "sms"],
     metadata = null
 }
-[[/types_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -189,7 +189,7 @@ user_profile = {
     def test_ftml_with_brackets_in_strings(self):
         """Test FTML containing bracket characters that might confuse FlexTag parser."""
         test_string = """
-[[tricky_ftml]]: ftml
+[[#tricky_ftml]]: ftml
 // Test bracket content in strings
 description = "This FTML contains [[double brackets]] in a string"
 template = "FlexTag section: [[section_name]] goes here"
@@ -210,7 +210,7 @@ examples = [
     "[Example] 2 with single brackets",
     {content = "Object with [[brackets]]"}
 ]
-[[/tricky_ftml]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -235,7 +235,7 @@ examples = [
         """Test FTML with schema validation if available."""
         # Test data that should validate against a basic schema
         test_string = """
-[[user_config]]: ftml
+[[#user_config]]: ftml
 // User configuration
 name = "John Doe"
 age = 30
@@ -247,7 +247,7 @@ preferences = {
     notifications = true,
     language = "en"
 }
-[[/user_config]]
+[[/]]
 """
 
         # Test with schema validation
@@ -284,25 +284,25 @@ preferences: {
             assert "user_config" in str(e) or True  # Allow test to pass
 
     def test_multiple_ftml_sections(self):
-        """Test multiple FTML sections with same ID."""
+        """Test multiple FTML sections with same tag."""
         test_string = """
-[[config]]: ftml
+[[#config]]: ftml
 format = "ftml"
 version = 1
 features = ["validation", "comments"]
-[[/config]]
+[[/]]
 
-[[config]]: ftml
+[[#config]]: ftml
 format = "ftml"
 version = 2
 features = ["validation", "comments", "schemas"]
-[[/config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
-        sections = [s for s in view.sections if s.id == "config"]
+        sections = [s for s in view.sections if "#config" in s.tags]
 
-        # Multiple sections with same ID
+        # Multiple sections with same tag
         assert len(sections) == 2
         assert sections[0].content["version"] == 1
         assert sections[1].content["version"] == 2
@@ -311,16 +311,16 @@ features = ["validation", "comments", "schemas"]
     def test_ftml_mixed_with_other_formats(self):
         """Test FTML sections alongside other format types."""
         test_string = """
-[[config]]: ftml
+[[#config #ftml_format]]: ftml
 format = "ftml"
 data = ["item1", "item2"]
 metadata = {
     created = "2023-01-01",
     author = "FTML"
 }
-[[/config]]
+[[/]]
 
-[[config]]: json
+[[#config #json_format]]: json
 {
     "format": "json",
     "data": ["item3", "item4"],
@@ -329,9 +329,9 @@ metadata = {
         "author": "JSON"
     }
 }
-[[/config]]
+[[/]]
 
-[[summary]]: ftml
+[[#summary]]: ftml
 total_configs = 2
 formats = ["ftml", "json"]
 notes = "All formats can coexist with [[sections]]"
@@ -339,13 +339,13 @@ comparison = {
     ftml_advantage = "Human-readable with validation",
     json_advantage = "Widely supported"
 }
-[[/summary]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
 
-        # Test mixed formats - get sections by ID
-        configs = [s for s in view.sections if s.id == "config"]
+        # Test mixed formats - get sections by tag
+        configs = [s for s in view.sections if "#config" in s.tags]
         assert len(configs) == 2
         assert configs[0].content["format"] == "ftml"
         assert configs[1].content["format"] == "json"
@@ -353,7 +353,7 @@ comparison = {
         assert configs[1].content["metadata"]["author"] == "JSON"
 
         # Test summary section
-        summary_section = [s for s in view.sections if s.id == "summary"][0]
+        summary_section = [s for s in view.sections if "#summary" in s.tags][0]
         summary = summary_section.content
         assert summary["total_configs"] == 2
         assert "ftml" in summary["formats"]
@@ -366,11 +366,11 @@ comparison = {
     def test_ftml_parsing_errors(self):
         """Test that invalid FTML raises appropriate errors."""
         invalid_ftml = """
-[[bad_ftml]]: ftml
+[[#bad_ftml]]: ftml
 name = "test"
 // Invalid FTML syntax - missing quotes
 invalid_syntax = unquoted string here
-[[/bad_ftml]]
+[[/]]
 """
 
         view = flextag.load(string=invalid_ftml)
@@ -384,9 +384,9 @@ invalid_syntax = unquoted string here
     def test_empty_ftml_section(self):
         """Test empty FTML section behavior."""
         test_string = """
-[[empty_ftml]]: ftml
+[[#empty_ftml]]: ftml
 // Empty section with just comments
-[[/empty_ftml]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -406,9 +406,9 @@ invalid_syntax = unquoted string here
             # Test that proper error is raised when FTML library is missing
             with pytest.raises(flextag.FlexTagSyntaxError) as exc_info:
                 test_string = """
-[[test]]: ftml
+[[#test]]: ftml
 name = "test"
-[[/test]]
+[[/]]
 """
                 view = flextag.load(string=test_string)
                 _ = view.sections[0].content
@@ -418,13 +418,13 @@ name = "test"
     def test_ftml_special_characters_and_encoding(self):
         """Test FTML handling of special characters and Unicode."""
         test_string = """
-[[unicode_test]]: ftml
+[[#unicode_test]]: ftml
 // Test various special characters and Unicode
 unicode_text = "Hello 世界! 🌟 مرحبا"
 emoji_array = ["😀", "🚀", "🎉", "🔥"]
 mixed_symbols = {
     at_symbol = "@username",
-    hash_symbol = "#hashtag", 
+    hash_symbol = "#hashtag",
     dollar = "$100.50",
     percent = "95%",
     euro = "€50",
@@ -441,7 +441,7 @@ escaped_content = {
 
 // Special formatting
 multiline_example = "This is a long string that might wrap across multiple lines but is still a single value"
-[[/unicode_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -473,7 +473,7 @@ multiline_example = "This is a long string that might wrap across multiple lines
     def test_ftml_complex_nested_structures(self):
         """Test deeply nested FTML structures."""
         test_string = """
-[[complex_structure]]: ftml
+[[#complex_structure]]: ftml
 // Complex nested configuration
 application = {
     name = "MyApp",
@@ -485,7 +485,7 @@ application = {
             dependencies = ["axios", "lodash", "moment"]
         },
         backend = {
-            framework = "FastAPI", 
+            framework = "FastAPI",
             version = "0.100.0",
             services = [
                 {
@@ -515,7 +515,7 @@ application = {
         }
     }
 }
-[[/complex_structure]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)

@@ -22,17 +22,17 @@ from flextag.flextag import Section, FlexTag
 # ---------------------------------------------------------------------------
 
 
-def make_section(content_lines, type_name="text", section_id="test"):
+def make_section(content_lines, type_name="text", tag="#test"):
     """Create a Section directly from content lines and a type name."""
-    open_line_text = f"[[{section_id}]]: {type_name}\n"
-    close_line_text = f"[[/{section_id}]]\n"
+    open_line_text = f"[[{tag}]]: {type_name}\n"
+    close_line_text = "[[/]]\n"
     all_lines = (
         [open_line_text] + [line + "\n" for line in content_lines] + [close_line_text]
     )
 
     return Section(
-        section_id=section_id,
-        tags=[],
+        section_id="",
+        tags=[tag],
         paths=[],
         parameters={},
         type_name=type_name,
@@ -65,9 +65,9 @@ class TestTextType:
     def test_text_type_returns_string(self):
         """Type 'text' returns content as a Python str."""
         test_string = """
-[[doc]]: text
+[[#doc]]: text
 Hello, world!
-[[/doc]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         content = view.sections[0].content
@@ -77,9 +77,9 @@ Hello, world!
     def test_text_preserves_unicode(self):
         """Text content with Unicode characters is preserved."""
         test_string = """
-[[unicode_doc]]: text
+[[#unicode_doc]]: text
 Héllo wörld! 你好世界 🌍🚀
-[[/unicode_doc]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         content = view.sections[0].content
@@ -90,11 +90,11 @@ Héllo wörld! 你好世界 🌍🚀
     def test_text_multiline_preserved(self):
         """Multi-line text content preserves all lines."""
         test_string = """
-[[multiline]]: text
+[[#multiline]]: text
 Line 1
 Line 2
 Line 3
-[[/multiline]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         content = view.sections[0].content
@@ -103,9 +103,9 @@ Line 3
     def test_default_type_is_text(self):
         """Sections with no explicit type default to 'text'."""
         test_string = """
-[[no_type]]
+[[#no_type]]
 Default type content
-[[/no_type]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         section = view.sections[0]
@@ -122,8 +122,8 @@ Default type content
     def test_empty_text_section(self):
         """An empty text section returns empty string."""
         test_string = """
-[[empty]]: text
-[[/empty]]
+[[#empty]]: text
+[[/]]
 """
         view = flextag.load(string=test_string)
         assert view.sections[0].content == ""
@@ -140,9 +140,9 @@ class TestBinaryType:
     def test_binary_returns_bytes(self):
         """Type 'binary' returns content as bytes."""
         test_string = """
-[[data]]: binary
+[[#data]]: binary
 Hello binary
-[[/data]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         content = view.sections[0].content
@@ -172,7 +172,7 @@ Hello binary
         # Latin-1 bytes 0x80-0xFF are not valid standalone UTF-8
         test_bytes = bytes(range(0x80, 0x100))
 
-        file_content = b"[[data]]: binary\n" + test_bytes + b"\n[[/data]]\n"
+        file_content = b"[[#data]]: binary\n" + test_bytes + b"\n[[/]]\n"
         filepath = write_binary_file(file_content)
         try:
             view = FlexTag.load(path=filepath, validate=False)
@@ -184,7 +184,7 @@ Hello binary
 
     def test_binary_single_non_utf8_byte(self):
         """A single non-UTF-8 byte (0xFF) survives the binary round-trip."""
-        file_content = b"[[data]]: binary\n\xff\n[[/data]]\n"
+        file_content = b"[[#data]]: binary\n\xff\n[[/]]\n"
         filepath = write_binary_file(file_content)
         try:
             view = FlexTag.load(path=filepath, validate=False)
@@ -201,7 +201,7 @@ Hello binary
         """
         test_bytes = bytes([b for b in range(256) if b not in (0x0A, 0x0D)])
 
-        file_content = b"[[data]]: binary\n" + test_bytes + b"\n[[/data]]\n"
+        file_content = b"[[#data]]: binary\n" + test_bytes + b"\n[[/]]\n"
         filepath = write_binary_file(file_content)
         try:
             view = FlexTag.load(path=filepath, validate=False)
@@ -213,8 +213,8 @@ Hello binary
     def test_empty_binary_section(self):
         """An empty binary section returns empty string (early return)."""
         test_string = """
-[[empty]]: binary
-[[/empty]]
+[[#empty]]: binary
+[[/]]
 """
         view = flextag.load(string=test_string)
         assert view.sections[0].content == ""
@@ -231,13 +231,13 @@ class TestMixedSections:
     def test_text_and_binary_together(self):
         """A file can have both text and binary sections."""
         test_string = """
-[[text_part]]: text
+[[#text_part]]: text
 Hello, this is text.
-[[/text_part]]
+[[/]]
 
-[[binary_part]]: binary
+[[#binary_part]]: binary
 Raw binary data here
-[[/binary_part]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         text_content = view.sections[0].content
@@ -251,22 +251,22 @@ Raw binary data here
     def test_text_binary_and_markup_together(self):
         """Text and binary sections coexist with markup sections."""
         test_string = """
-[[text]]: text
+[[#text]]: text
 Plain text content
-[[/text]]
+[[/]]
 
-[[config]]: json
+[[#config]]: json
 {"key": "value"}
-[[/config]]
+[[/]]
 
-[[data]]: binary
+[[#data]]: binary
 Binary stuff
-[[/data]]
+[[/]]
 
-[[meta]]: yaml
+[[#meta]]: yaml
 name: test
 version: 1
-[[/meta]]
+[[/]]
 """
         view = flextag.load(string=test_string)
         sections = view.sections
@@ -310,9 +310,9 @@ class TestEdgeCases:
         import logging
 
         test_string = """
-[[data]]: some_unknown_type
+[[#data]]: some_unknown_type
 Content here
-[[/data]]
+[[/]]
 """
         with caplog.at_level(logging.WARNING):
             view = flextag.load(string=test_string)
@@ -325,7 +325,7 @@ Content here
     def test_self_closing_section(self):
         """A self-closing section returns empty string."""
         test_string = """
-[[self_close /]]: text
+[[#self_close /]]: text
 """
         view = flextag.load(string=test_string)
         assert view.sections[0].content == ""

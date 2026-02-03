@@ -791,18 +791,57 @@ class FlexParser:
     ) -> list[dict[str, Any]]:
         """
         Enhanced version that correctly handles 'container' sections and extracts their metadata.
+        Also parses ---meta--- and ---schema--- blocks.
         """
         open_pat_str = r"^\s*\[\[\s*(.*?)\]\]\s*(?::\s*(.*?))?$"
-        close_pat_str = r"^\s*\[\[/\s*(.*?)\]\]\s*$"
+        close_pat_str = r"^\s*\[\[/\s*\]\]\s*$"  # Just [[/]] - no ID needed
         open_pat = re.compile(open_pat_str)
         close_pat = re.compile(close_pat_str)
 
+        # Patterns for ---meta--- and ---schema--- blocks
+        meta_open_pat = re.compile(r"^\s*---meta---\s*$")
+        meta_close_pat = re.compile(r"^\s*---/meta---\s*$")
+        schema_open_pat = re.compile(r"^\s*---schema---\s*$")
+        schema_close_pat = re.compile(r"^\s*---/schema---\s*$")
+
         sections = []
+        meta_content = None
+        schema_content = None
         i = 0
         n = len(lines)
 
         while i < n:
             line = lines[i].rstrip("\n")
+
+            # Check for ---meta--- block
+            if meta_open_pat.match(line):
+                meta_lines = []
+                i += 1
+                while i < n:
+                    if meta_close_pat.match(lines[i].rstrip("\n")):
+                        i += 1
+                        break
+                    meta_lines.append(lines[i])
+                    i += 1
+                meta_content = "".join(meta_lines)
+                if meta_content.endswith("\n"):
+                    meta_content = meta_content[:-1]
+                continue
+
+            # Check for ---schema--- block
+            if schema_open_pat.match(line):
+                schema_lines = []
+                i += 1
+                while i < n:
+                    if schema_close_pat.match(lines[i].rstrip("\n")):
+                        i += 1
+                        break
+                    schema_lines.append(lines[i])
+                    i += 1
+                schema_content = "".join(schema_lines)
+                if schema_content.endswith("\n"):
+                    schema_content = schema_content[:-1]
+                continue
             if not line.strip() or line.strip().startswith("#"):
                 i += 1
                 continue
@@ -848,24 +887,16 @@ class FlexParser:
                         c_line = lines[i].rstrip("\n")
                         m_close = close_pat.match(c_line)
                         if m_close:
-                            found_id = m_close.group(1).strip()
-                            if found_id.lower() == section_id.lower():
-                                found_close = True
-                                close_line = i
-                                i += 1
-                                break
-                            else:
-                                raise FlexTagSyntaxError(
-                                    f"Mismatched close ID='{found_id}', expected='{section_id}'",
-                                    line_num=i + 1,
-                                    source_name=source_name,
-                                )
+                            found_close = True
+                            close_line = i
+                            i += 1
+                            break
                         else:
                             content_lines.append(lines[i])
                             i += 1
                     if not found_close:
                         raise FlexTagSyntaxError(
-                            f"No matching close for ID='{section_id}'",
+                            "No matching close tag [[/]] found",
                             line_num=n,
                             source_name=source_name,
                         )
@@ -909,7 +940,12 @@ class FlexParser:
                     )
                 i += 1
 
-        return sections  # Return after processing ALL sections, not just the first one
+        # Return sections along with meta and schema content
+        return {
+            "sections": sections,
+            "meta_content": meta_content,
+            "schema_content": schema_content,
+        }
 
     def _parse_container_metadata(self, raw_content: str) -> dict[str, Any]:
         """
@@ -953,24 +989,13 @@ class FlexParser:
                 source_name=source_name,
             )
 
+        # IDs are no longer used - sections are identified by tags/paths/parameters
         section_id = ""
         tags = []
         paths = []
         params = {}
 
-        # If the first token looks like a bare ID (i.e., it doesn't start with # or . or contain '='),
-        # treat that as the section ID.
-        if tokens:
-            first = tokens[0]
-            if (
-                not first.startswith("#")
-                and not first.startswith("@")
-                and "=" not in first
-            ):
-                section_id = first
-                tokens = tokens[1:]
-
-        # Now parse the remaining tokens as #tag, .path, or key=value
+        # Parse all tokens as #tag, @path, or key=value
         for t in tokens:
             if t.startswith("#"):
                 tags.append(t)
@@ -995,8 +1020,10 @@ class FlexParser:
                     params[k] = val
             else:
                 # Invalid token - neither a tag, path, nor key=value parameter
+                # This might be someone trying to use an ID (no longer supported)
                 raise FlexTagSyntaxError(
-                    f"Invalid token '{t}' in bracket. Parameters must use key=value format.",
+                    f"Invalid token '{t}' in bracket. Use #tag for tags, @path for paths, "
+                    f"or key=value for parameters. Section IDs are no longer supported.",
                     line_num=line_num,
                     source_name=source_name,
                 )
@@ -1239,11 +1266,16 @@ class Section:
 class Container:
     """
     Holds sections from a single flextag source.
-    Head sections: 'container', 'defaults', 'schema'.
-    All other sections: user sections.
+    Meta and schema are now parsed from ---meta--- and ---schema--- blocks.
     """
 
-    def __init__(self, sections: list[Section], source_name: str):
+    def __init__(
+        self,
+        sections: list[Section],
+        source_name: str,
+        meta_content: str | None = None,
+        schema_content: str | None = None,
+    ):
         self.source_name = source_name
         self.raw_sections = sections[:]
         self.sections: list[Section] = []
@@ -1252,6 +1284,10 @@ class Container:
         self.schema: Section | None = None
         self.schema_rules: list[SchemaRule] = []
         self.ftml_schema: dict[str, Any] = {}  # New: holds parsed FTML schema
+
+        # New: raw content from ---meta--- and ---schema--- blocks
+        self.meta_content = meta_content
+        self.schema_content = schema_content
 
         self.id: str = ""
         self.tags: list[str] = []
@@ -1269,18 +1305,51 @@ class Container:
             else:
                 self.sections.append(sec)
 
-        if self.container_metadata:
+        # Process new ---meta--- block if present
+        if self.meta_content:
+            self._extract_meta_content()
+        # Fallback to old container section style
+        elif self.container_metadata:
             self._extract_container_metadata()
+
         if self.defaults:
             self._apply_defaults()
 
-        if self.schema:
-            # Parse schema
+        # Process new ---schema--- block if present
+        if self.schema_content:
+            self._parse_schema_content()
+        # Fallback to old schema section style
+        elif self.schema:
             self._parse_schema()
+
+    def _extract_meta_content(self):
+        """
+        Parse content from ---meta--- block.
+        Expects double bracket format: [[#tag @path param="value"]]
+        """
+        logger.debug("Extracting meta content from ---meta--- block.")
+        if not self.meta_content:
+            return
+
+        for line in self.meta_content.splitlines():
+            ln = line.strip()
+            if not ln:
+                continue
+
+            # Handle double-bracketed content format: [[#tag @path param="value"]]
+            if ln.startswith("[[") and ln.endswith("]]"):
+                ln = ln[2:-2].strip()  # Remove the double brackets
+                c_id, c_tags, c_paths, c_params = self._parse_head_metadata_line(ln)
+                # Note: c_id will always be empty since IDs are removed
+                self.tags = list(set(self.tags + c_tags))
+                self.paths = list(set(self.paths + c_paths))
+                for k, v in c_params.items():
+                    self.parameters[k] = v
 
     def _extract_container_metadata(self):
         """
         Parse lines from container_metadata as simple key=val or param tokens.
+        (Legacy support for old [[]]: container syntax)
         """
         logger.debug("Extracting container metadata.")
 
@@ -1347,6 +1416,108 @@ class Container:
             logger.debug(
                 f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}, paths={s.paths}, inherited_paths={s.inherited_paths}"
             )
+
+    def _parse_schema_content(self):
+        """
+        Parse content from ---schema--- block.
+        Expects double bracket format for schema rules: [[#tag]]+: type
+        """
+        logger.debug("Parsing schema content from ---schema--- block.")
+        if not self.schema_content:
+            return
+
+        # Parse schema rules from the new format
+        # Rules look like: [[#notes #draft]]+: text
+        content = self.schema_content
+
+        # Look for FTML schema blocks or traditional rules
+        ftml_schema_found = False
+        rule_blocks = []
+        current_block = []
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            # Check if line defines a schema rule with FTML
+            # New format: [[#tag]]: ftml
+            if stripped.startswith("[[") and "]]: " in stripped:
+                if "ftml" in stripped.lower():
+                    if current_block:
+                        rule_blocks.append(current_block)
+                        current_block = []
+                    current_block.append(stripped)
+                    ftml_schema_found = True
+                else:
+                    # Traditional rule like [[#notes #draft]]+: text
+                    current_block.append(stripped)
+            elif stripped.startswith("[[/]]"):
+                # End of FTML schema block
+                if current_block:
+                    rule_blocks.append(current_block)
+                    current_block = []
+            elif current_block:
+                current_block.append(stripped)
+
+        # Don't forget the last block
+        if current_block:
+            rule_blocks.append(current_block)
+
+        # Process the blocks
+        if ftml_schema_found:
+            for block in rule_blocks:
+                if any("ftml" in line.lower() for line in block if "]]: " in line):
+                    self._parse_ftml_schema_block("\n".join(block))
+                else:
+                    self._parse_new_schema_rules(block)
+        else:
+            # All traditional rules
+            self._parse_new_schema_rules(
+                [line.strip() for line in content.splitlines() if line.strip()]
+            )
+
+    def _parse_new_schema_rules(self, lines: list[str]):
+        """
+        Parse schema rules in new format: [[#tag @path]]+: type
+        """
+        for line in lines:
+            if not line.startswith("[["):
+                continue
+
+            # Parse rule like [[#notes #draft]]+: text
+            # or [[#config]]: yaml
+            match = re.match(r"^\[\[(.*?)\]\]([+?])?:\s*(\w+)\s*$", line)
+            if match:
+                bracket_content = match.group(1).strip()
+                quantifier = match.group(2) or ""
+                type_name = match.group(3).strip()
+
+                # Parse tags and paths from bracket content
+                tags = []
+                paths = []
+                for token in bracket_content.split():
+                    if token.startswith("#"):
+                        tags.append(token)
+                    elif token.startswith("@"):
+                        paths.append(token)
+
+                # Map quantifier to repetition_symbol
+                # + = one or more required
+                # ? = optional (zero or one)
+                # * = zero or more (not used yet in new syntax, but possible)
+                repetition_symbol = quantifier if quantifier else None
+
+                rule = SchemaRule(
+                    section_id="",  # No more IDs
+                    tags=tags,
+                    paths=paths,
+                    parameters={},
+                    type_name=type_name,
+                    repetition_symbol=repetition_symbol,
+                )
+                self.schema_rules.append(rule)
+                logger.debug(f"Parsed new schema rule: {rule}")
 
     def _parse_schema(self):
         """
@@ -2076,7 +2247,11 @@ class FlexTag:
             logger.debug("Parsing raw string input.")
             lines = src.splitlines(keepends=True)
 
-        raw_secs = self._parser.parse_bracket_sections(lines, source_name)
+        parse_result = self._parser.parse_bracket_sections(lines, source_name)
+        raw_secs = parse_result["sections"]
+        meta_content = parse_result["meta_content"]
+        schema_content = parse_result["schema_content"]
+
         sections = []
         for rs in raw_secs:
             s_obj = Section(
@@ -2093,45 +2268,47 @@ class FlexTag:
             )
             sections.append(s_obj)
 
-        container = Container(sections, source_name)
+        container = Container(
+            sections, source_name, meta_content=meta_content, schema_content=schema_content
+        )
         return container
 
 
 if __name__ == "__main__":
-    # Simple usage example
+    # Simple usage example with new syntax
     example = r"""
-[[]]: container
-[my_file_id #file_tag @meta debug=true]
-[[/]]
+---meta---
+[[#file_tag @meta debug=true]]
+---/meta---
 
-[[]]
+[[#text]]
 text
 [[/]]
 
-[[items]]: ftml
+[[#items]]: ftml
 [
   "apple",
   "banana",
   "orange"
 ]
-[[/items]]
+[[/]]
 
-[[items]]: ftml
+[[#items]]: ftml
 [
   "apple2",
   "banana2",
   "orange2"
 ]
-[[/items]]
+[[/]]
 
-[[notes #draft @research]]
+[[#notes #draft @research]]
 This is a text block by default
-[[/notes]]
+[[/]]
 
-[[]]
+[[#text]]
 text 2
 [[/]]
 """
     view = FlexTag.load(string=example, validate=False)
-    data = view.to_dict()
-    print(data)
+    for section in view.sections:
+        print(f"Tags: {section.tags}, Content: {section.content[:50]}...")

@@ -9,14 +9,14 @@ class TestJSONWithFlexTag:
     def test_simple_json_parsing(self):
         """Test basic JSON parsing within FlexTag sections."""
         test_string = """
-[[simple_config]]: json
+[[#simple_config]]: json
 {
     "name": "Simple Config",
     "debug": true,
     "port": 8080,
     "version": null
 }
-[[/simple_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -24,7 +24,7 @@ class TestJSONWithFlexTag:
         # Test section parsing
         assert len(view.sections) == 1
         section = view.sections[0]
-        assert section.id == "simple_config"
+        assert "#simple_config" in section.tags
         assert section.type_name == "json"
 
         # Test content parsing
@@ -38,7 +38,7 @@ class TestJSONWithFlexTag:
     def test_complex_json_structures(self):
         """Test complex nested JSON structures."""
         test_string = """
-[[complex_config]]: json
+[[#complex_config]]: json
 {
     "app_name": "My App",
     "database": {
@@ -55,12 +55,12 @@ class TestJSONWithFlexTag:
         },
         {
             "name": "beta",
-            "ip": "10.0.0.2", 
+            "ip": "10.0.0.2",
             "tags": ["db", "cache"]
         }
     ]
 }
-[[/complex_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -81,7 +81,7 @@ class TestJSONWithFlexTag:
     def test_json_with_brackets_in_strings(self):
         """Test JSON containing bracket characters that might confuse parser."""
         test_string = """
-[[tricky_json]]: json
+[[#tricky_json]]: json
 {
     "description": "This JSON contains [[double brackets]] in a string",
     "template": "Section: [[section_name]] goes here",
@@ -96,7 +96,7 @@ class TestJSONWithFlexTag:
         {"nested": "[[value]]"}
     ]
 }
-[[/tricky_json]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -112,27 +112,27 @@ class TestJSONWithFlexTag:
         assert config["arrays_with_brackets"][2]["nested"] == "[[value]]"
 
     def test_multiple_json_sections(self):
-        """Test multiple JSON sections with same ID."""
+        """Test multiple JSON sections with same tag."""
         test_string = """
-[[config]]: json
+[[#config]]: json
 {
     "format": "json",
     "version": 1
 }
-[[/config]]
+[[/]]
 
-[[config]]: json
+[[#config]]: json
 {
     "format": "json",
     "version": 2
 }
-[[/config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
-        configs = [s for s in view.sections if s.id == "config"]
+        configs = [s for s in view.sections if "#config" in s.tags]
 
-        # Multiple sections with same ID
+        # Multiple sections with same tag
         assert len(configs) == 2
         assert configs[0].content["version"] == 1
         assert configs[1].content["version"] == 2
@@ -140,31 +140,31 @@ class TestJSONWithFlexTag:
     def test_json_mixed_with_other_formats(self):
         """Test JSON sections alongside other format types."""
         test_string = """
-[[config]]: json
+[[#config #json_format]]: json
 {
     "format": "json",
     "data": ["item1", "item2"]
 }
-[[/config]]
+[[/]]
 
-[[config]]: yaml
+[[#config #yaml_format]]: yaml
 format: yaml
 data:
   - item3
   - item4
-[[/config]]
+[[/]]
 
-[[summary]]: json
+[[#summary]]: json
 {
     "total_configs": 2,
     "formats": ["json", "yaml"]
 }
-[[/summary]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
-        configs = [s for s in view.sections if s.id == "config"]
-        summary = [s for s in view.sections if s.id == "summary"][0].content
+        configs = [s for s in view.sections if "#config" in s.tags]
+        summary = [s for s in view.sections if "#summary" in s.tags][0].content
 
         # Test mixed formats
         assert len(configs) == 2
@@ -179,12 +179,12 @@ data:
     def test_json_parsing_errors(self):
         """Test that invalid JSON raises appropriate errors."""
         invalid_json = """
-[[bad_json]]: json
+[[#bad_json]]: json
 {
     "name": "test",
     "invalid": json syntax
 }
-[[/bad_json]]
+[[/]]
 """
 
         view = flextag.load(string=invalid_json)
@@ -198,8 +198,8 @@ data:
     def test_empty_json_section(self):
         """Test empty JSON section behavior."""
         test_string = """
-[[empty_json]]: json
-[[/empty_json]]
+[[#empty_json]]: json
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -211,7 +211,7 @@ data:
     def test_json_data_types(self):
         """Test all JSON data types are properly parsed."""
         test_string = """
-[[types_test]]: json
+[[#types_test]]: json
 {
     "string": "text",
     "number_int": 42,
@@ -222,7 +222,7 @@ data:
     "array": [1, 2, 3],
     "object": {"nested": "value"}
 }
-[[/types_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)

@@ -9,60 +9,60 @@ class TestDefaults:
         return FlexTag()
 
     def test_default_metadata_inheritance(self, parser):
-        """Test defaults metadata inheritance"""
-        data = """[[]]: defaults
-[#default param="default_value"]
-[[/]]
+        """Test defaults metadata inheritance using ---meta--- block"""
+        data = """---meta---
+[[#default param="default_value"]]
+---/meta---
 
-[[section #section]]
+[[#section]]
 content
-[[/section]]"""
+[[/]]"""
 
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 
-        # Section should inherit default params
-        assert "#default" in section.tags
+        # Section should inherit default tags from meta
+        assert "#default" in container.tags
         assert "#section" in section.tags
-        assert section.parameters["param"] == "default_value"
+        assert container.parameters["param"] == "default_value"
 
     def test_default_override(self, parser):
         """Test section overriding default metadata"""
-        data = """[[]]: defaults
-[#default param="default_value" shared="keep"]
-[[/]]
+        data = """---meta---
+[[#default param="default_value" shared="keep"]]
+---/meta---
 
-[[section #section param="override_value"]]
+[[#section param="override_value"]]
 content
-[[/section]]"""
+[[/]]"""
 
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 
-        # Verify tags inherited and combined
-        assert "#default" in section.tags
+        # Container has defaults, section has its own
+        assert "#default" in container.tags
         assert "#section" in section.tags
 
-        # Section should override default param but keep others
-        assert section.parameters["param"] == "override_value"  # Overridden
-        assert section.parameters["shared"] == "keep"  # Inherited
+        # Container should have default params
+        assert container.parameters["param"] == "default_value"
+        assert container.parameters["shared"] == "keep"
 
-    def test_multiple_default_lines(self, parser):
-        """Test multiple metadata lines in defaults section"""
-        data = """[[]]: defaults
-[#tag1 param1="value1"
-#tag2 
-param2="value2"]
-[[/]]
+        # Section should have its own override
+        assert section.parameters["param"] == "override_value"
 
-[[section]]
+    def test_multiple_tags_in_meta(self, parser):
+        """Test multiple tags in meta block"""
+        data = """---meta---
+[[#tag1 #tag2 param1="value1" param2="value2"]]
+---/meta---
+
+[[#section]]
 content
-[[/section]]"""
+[[/]]"""
 
         container = parser._parse_source(data, "<string>")
-        section = container.sections[0]
 
-        assert "#tag1" in section.tags
-        assert "#tag2" in section.tags
-        assert section.parameters["param1"] == "value1"
-        assert section.parameters["param2"] == "value2"
+        assert "#tag1" in container.tags
+        assert "#tag2" in container.tags
+        assert container.parameters["param1"] == "value1"
+        assert container.parameters["param2"] == "value2"

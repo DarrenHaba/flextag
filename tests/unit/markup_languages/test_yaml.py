@@ -9,12 +9,12 @@ class TestYAMLWithFlexTag:
     def test_simple_yaml_parsing(self):
         """Test basic YAML parsing within FlexTag sections."""
         test_string = """
-[[simple_config]]: yaml
+[[#simple_config]]: yaml
 name: "Simple Config"
 debug: true
 port: 8080
 version: null
-[[/simple_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -22,7 +22,7 @@ version: null
         # Test section parsing
         assert len(view.sections) == 1
         section = view.sections[0]
-        assert section.id == "simple_config"
+        assert "#simple_config" in section.tags
         assert section.type_name == "yaml"
 
         # Test content parsing
@@ -36,7 +36,7 @@ version: null
     def test_complex_yaml_structures(self):
         """Test complex nested YAML structures."""
         test_string = """
-[[complex_config]]: yaml
+[[#complex_config]]: yaml
 app_name: "My App"
 database:
   host: localhost
@@ -61,7 +61,7 @@ api:
   endpoints:
     - users
     - posts
-[[/complex_config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -85,7 +85,7 @@ api:
     def test_yaml_with_brackets_in_strings(self):
         """Test YAML containing bracket characters that might confuse parser."""
         test_string = """
-[[tricky_yaml]]: yaml
+[[#tricky_yaml]]: yaml
 description: "This YAML contains [[double brackets]] in a string"
 template: "Section: [[section_name]] goes here"
 
@@ -98,7 +98,7 @@ arrays_with_brackets:
   - "[item1]"
   - "[[item2]]"
   - nested: "[[value]]"
-[[/tricky_yaml]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -116,7 +116,7 @@ arrays_with_brackets:
     def test_yaml_multiline_strings(self):
         """Test YAML multiline strings with brackets."""
         test_string = """
-[[multiline_test]]: yaml
+[[#multiline_test]]: yaml
 # Literal block scalar
 literal: |
   This is a multiline string
@@ -129,7 +129,7 @@ folded: >
   This is a folded string
   with [[brackets]] that should
   be treated as regular text.
-[[/multiline_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -144,7 +144,7 @@ folded: >
     def test_yaml_anchors_and_aliases(self):
         """Test YAML anchors and aliases functionality."""
         test_string = """
-[[yaml_features]]: yaml
+[[#yaml_features]]: yaml
 # YAML anchors and aliases
 defaults: &defaults
   timeout: 30
@@ -159,7 +159,7 @@ development:
   <<: *defaults
   host: dev.example.com
   debug: true
-[[/yaml_features]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -181,7 +181,7 @@ development:
     def test_yaml_data_types(self):
         """Test YAML data type parsing."""
         test_string = """
-[[types_test]]: yaml
+[[#types_test]]: yaml
 string: "text"
 integer: 42
 float: 3.14
@@ -196,7 +196,7 @@ list:
 mapping:
   key1: value1
   key2: value2
-[[/types_test]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -222,23 +222,23 @@ mapping:
         assert content["mapping"]["key1"] == "value1"
 
     def test_multiple_yaml_sections(self):
-        """Test multiple YAML sections with same ID."""
+        """Test multiple YAML sections with same tag."""
         test_string = """
-[[config]]: yaml
+[[#config]]: yaml
 format: yaml
 version: 1
-[[/config]]
+[[/]]
 
-[[config]]: yaml
+[[#config]]: yaml
 format: yaml
 version: 2
-[[/config]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
-        configs = [s for s in view.sections if s.id == "config"]
+        configs = [s for s in view.sections if "#config" in s.tags]
 
-        # Multiple sections with same ID
+        # Multiple sections with same tag
         assert len(configs) == 2
         assert configs[0].content["version"] == 1
         assert configs[1].content["version"] == 2
@@ -246,31 +246,31 @@ version: 2
     def test_yaml_mixed_with_other_formats(self):
         """Test YAML sections alongside other format types."""
         test_string = """
-[[config]]: yaml
+[[#config #yaml_format]]: yaml
 format: yaml
 data:
   - item1
   - item2
-[[/config]]
+[[/]]
 
-[[config]]: json
+[[#config #json_format]]: json
 {
     "format": "json",
     "data": ["item3", "item4"]
 }
-[[/config]]
+[[/]]
 
-[[summary]]: yaml
+[[#summary]]: yaml
 total_configs: 2
 formats:
   - yaml
   - json
-[[/summary]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)
-        configs = [s for s in view.sections if s.id == "config"]
-        summary = [s for s in view.sections if s.id == "summary"][0].content
+        configs = [s for s in view.sections if "#config" in s.tags]
+        summary = [s for s in view.sections if "#summary" in s.tags][0].content
 
         # Test mixed formats
         assert len(configs) == 2
@@ -285,11 +285,11 @@ formats:
     def test_yaml_parsing_errors(self):
         """Test that invalid YAML raises appropriate errors."""
         invalid_yaml = """
-[[bad_yaml]]: yaml
+[[#bad_yaml]]: yaml
 name: "test"
 invalid yaml: [unclosed bracket
   - item
-[[/bad_yaml]]
+[[/]]
 """
 
         view = flextag.load(string=invalid_yaml)
@@ -303,8 +303,8 @@ invalid yaml: [unclosed bracket
     def test_empty_yaml_section(self):
         """Test empty YAML section behavior."""
         test_string = """
-[[empty_yaml]]: yaml
-[[/empty_yaml]]
+[[#empty_yaml]]: yaml
+[[/]]
 """
 
         view = flextag.load(string=test_string)
@@ -316,7 +316,7 @@ invalid yaml: [unclosed bracket
     def test_yaml_comments_preserved_in_structure(self):
         """Test that YAML structure is maintained despite comments."""
         test_string = """
-[[commented_yaml]]: yaml
+[[#commented_yaml]]: yaml
 # This is a comment
 name: "Config"
 # Another comment
@@ -325,7 +325,7 @@ settings:
   debug: true
   # Final comment
   port: 8080
-[[/commented_yaml]]
+[[/]]
 """
 
         view = flextag.load(string=test_string)

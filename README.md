@@ -2,7 +2,7 @@
 
 FlexTag is a bracket-based markup language with sections, schema validation, and rich querying capabilities. Built to work seamlessly with FTML for advanced data storage and validation.
 
-## ⚠️ EXPERIMENTAL WARNING ⚠️
+## WARNING: EXPERIMENTAL
 
 > FlexTag is currently in the alpha stage (v0.4.0a1) with experimental syntax that may change significantly between versions. Do not use in production systems or with critical data until a stable 1.0 release.
 
@@ -23,28 +23,70 @@ This document provides syntax examples for FlexTag (container format) and FTML (
 FlexTag uses double bracket `[[]]` sections to encapsulate content:
 
 ```
-[[section_id #tag1 #tag2 @path.to.something param="value"]]: content_type
+[[#tag1 #tag2 @path.to.something param="value"]]: content_type
 content goes here
-[[/section_id]]
+[[/]]
 ```
 
 ### Section Components:
 
-- **Section ID**: `section_id` - Identifier for the section
 - **Tags**: `#tag1 #tag2` - Categorization labels (start with `#`)
 - **Paths**: `@path.to.something` - Hierarchical organization (start with `@`)
 - **Parameters**: `param="value"` - Key-value attributes
 - **Content Type**: `: content_type` - Format specifier (ftml, json, yaml, toml, text, binary)
 - **Content**: Everything between opening and closing markers
-- **Closing Tag**: `[[/section_id]]` - Must match opening ID
+- **Closing Tag**: `[[/]]` - Universal closing tag for all sections
 
 ### Multiple Tags and Paths:
 
 ```flextag
-[[config #production #v2 @app.backend @service.api ver="2.1" active=true]]: ftml
+[[#production #v2 @app.backend @service.api ver="2.1" active=true]]: ftml
 // FTML content here.
-[[/config]]
+[[/]]
 ```
+
+## File-Level Metadata
+
+FlexTag supports special blocks for file-level metadata and schema definitions:
+
+### Meta Block
+
+Use `---meta---` to define container-level metadata (tags, paths, parameters):
+
+```flextag
+---meta---
+[[#plugin @plugins.chart version=1.0 author="John"]]
+---/meta---
+
+[[#content]]
+Plugin content here
+[[/]]
+```
+
+### Schema Block
+
+Use `---schema---` to define validation rules for sections:
+
+```flextag
+---schema---
+[[#notes #draft]]+: text
+[[#config]]: yaml
+---/schema---
+
+[[#notes #draft]]
+This is a draft note
+[[/]]
+
+[[#config]]: yaml
+setting: value
+[[/]]
+```
+
+Schema quantifiers:
+- No symbol: Exactly one required
+- `?`: Optional (0 or 1)
+- `+`: One or more required
+- `*`: Zero or more
 
 ## FTML Data Syntax
 
@@ -68,7 +110,7 @@ tags = ["web", "api", "backend"]
 // Multiline array
 environments = [
     "development",
-    "staging", 
+    "staging",
     "production"
 ]
 ```
@@ -104,7 +146,7 @@ FlexTag can contain multiple content types:
 ### FTML:
 
 ```flextag
-[[config]]: ftml
+[[#config]]: ftml
 name = "MyApp"
 version = "1.0.0"
 features = ["auth", "api", "admin"]
@@ -112,13 +154,13 @@ database = {
     host = "localhost",
     port = 5432
 }
-[[/config]]
+[[/]]
 ```
 
 ### JSON:
 
 ```flextag
-[[endpoints]]: json
+[[#endpoints]]: json
 {
     "users": "/api/users",
     "products": "/api/products",
@@ -127,13 +169,13 @@ database = {
         "list": "/api/orders/list"
     }
 }
-[[/endpoints]]
+[[/]]
 ```
 
 ### YAML:
 
 ```flextag
-[[deployment]]: yaml
+[[#deployment]]: yaml
 provider: aws
 regions:
   - us-east-1
@@ -141,53 +183,53 @@ regions:
 resources:
   cpu: 2
   memory: 4G
-[[/deployment]]
+[[/]]
 ```
 
 ### TOML:
 
 ```flextag
-[[cache]]: toml
+[[#cache]]: toml
 ttl = 3600
 max_size = "2GB"
 
 [cache.redis]
 host = "redis.example.com"
 port = 6379
-[[/cache]]
+[[/]]
 ```
 
 ### Text:
 
 ```flextag
-[[response #note]]: text
+[[#response #note]]: text
 This is unstructured text content.
 It preserves formatting and whitespace exactly as written.
 
 This is great for text responses, code snippets,
 markdown content, HTML, CSS, Javascript, etc,
 or any content where exact formatting matters.
-[[/response]]
+[[/]]
 ```
 
 ```flextag
-[[script #python]]: text
+[[#script #python]]: text
 import os
 
 print("This is a python script")
 if os.environ.get("DEBUG") == "true":
     print("Debug mode enabled")
-[[/script]]
+[[/]]
 ```
 
 ### Binary:
 
 ```flextag
-[[data]]: binary
+[[#data]]: binary
 Raw byte content here - returns bytes instead of str.
 Useful for embedding binary data that needs to preserve
 exact byte values through surrogateescape encoding.
-[[/data]]
+[[/]]
 ```
 
 ## Common FlexTag Patterns
@@ -195,41 +237,41 @@ exact byte values through surrogateescape encoding.
 ### Environment-specific Configs:
 
 ```
-[[database #production]]: ftml
+[[#database #production]]: ftml
 host = "prod-db.company.com"
-[[/database]]
+[[/]]
 
-[[database #development]]: ftml
+[[#database #development]]: ftml
 host = "localhost"
-[[/database]]
+[[/]]
 ```
 
 ### Hierarchical Configs:
 
 ```
-[[server @app.backend]]: ftml
+[[#server @app.backend]]: ftml
 port = 8080
-[[/server]]
+[[/]]
 
-[[client @app.frontend]]: ftml
+[[#client @app.frontend]]: ftml
 port = 3000
-[[/client]]
+[[/]]
 ```
 
 ### Multiple Formats:
 
 ```
-[[auth]]: ftml
+[[#auth]]: ftml
 enabled = true
 provider = "oauth"
-[[/auth]]
+[[/]]
 
-[[auth_endpoints]]: json
+[[#auth_endpoints]]: json
 {
     "login": "/auth/login",
-    "logout": "/auth/logout" 
+    "logout": "/auth/logout"
 }
-[[/auth_endpoints]]
+[[/]]
 ```
 
 ## Filtering Syntax
@@ -267,30 +309,30 @@ Access sections directly through the view:
 import flextag
 
 config = """
-[[database #production]]: yaml
+[[#database #production]]: yaml
 host: prod-db.company.com
 port: 5432
-[[/database]]
+[[/]]
 
-[[database #development]]: yaml
+[[#database #development]]: yaml
 host: localhost
 port: 5432
-[[/database]]
+[[/]]
 """
 
 view = flextag.load(string=config)
 
 # Access all sections
 for section in view.sections:
-    print(section.id, section.content)
+    print(section.tags, section.content)
 
 # Filter by tag
 prod_sections = view.filter("#production")
 for section in prod_sections.sections:
     print(section.content["host"])  # prod-db.company.com
 
-# Get sections by ID
-db_sections = [s for s in view.sections if s.id == "database"]
+# Get sections by tag
+db_sections = [s for s in view.sections if "#database" in s.tags]
 print(len(db_sections))  # 2
 ```
 
@@ -320,26 +362,29 @@ Both `.flextag` and `.ft` file extensions are recognized.
 ## Complete Document Example
 
 ```
-[[app_config #production @app]]: ftml
-name = "MyApp"
-version = "2.1.0"
-debug = false
-[[/app_config]]
+---meta---
+[[#production @app version="2.1.0"]]
+---/meta---
 
-[[database #production @database.primary]]: yaml
+[[#app_config]]: ftml
+name = "MyApp"
+debug = false
+[[/]]
+
+[[#database @database.primary]]: yaml
 host: prod-db.company.com
 port: 5432
-[[/database]]
+[[/]]
 
-[[cache #production @database.cache]]: json
+[[#cache @database.cache]]: json
 {"host": "redis.company.com", "port": 6379}
-[[/cache]]
+[[/]]
 
-[[deploy_script #production @script.bash]]: text
+[[#deploy_script @script.bash]]: text
 #!/bin/bash
 docker build -t myapp .
 kubectl apply -f k8s/production/
-[[/deploy_script]]
+[[/]]
 ```
 
 Remember: FlexTag uses `[[...]]` for sections, while FTML uses `key = value` syntax with `{}` for objects and `[]` for arrays.
@@ -353,7 +398,7 @@ FlexTag parameters in section headers support both automatic type inference and 
 By default, parameter values are automatically converted to appropriate types:
 
 ```flextag
-[[section_id 
+[[#section
   name="admin"          // String (requires double quotes)
   count=42              // Integer
   score=3.14            // Float
@@ -363,18 +408,18 @@ By default, parameter values are automatically converted to appropriate types:
 ```
 
 Types are inferred as follows:
-- `"value"` → String (double quotes required)
-- `42` → Integer
-- `3.14` → Float
-- `true` or `false` → Boolean
-- `null` → Null
+- `"value"` -> String (double quotes required)
+- `42` -> Integer
+- `3.14` -> Float
+- `true` or `false` -> Boolean
+- `null` -> Null
 
 ### Explicit Type Annotations
 
 For more control, you can explicitly specify parameter types using the colon syntax:
 
 ```flextag
-[[section_id 
+[[#section
   name:str="admin"      // Explicitly a string
   count:int=42          // Explicitly an integer
   score:float=3.14      // Explicitly a float
@@ -404,7 +449,7 @@ FlexTag supports these parameter types:
 Add a question mark after the type to allow null values:
 
 ```flextag
-[[section_id
+[[#section
   name:str="John"       // Must be a string, cannot be null
   age:int?=null         // Can be integer or null
   score:float?=3.14     // Can be float or null
@@ -416,7 +461,7 @@ Add a question mark after the type to allow null values:
 Explicit type annotations can convert between compatible types:
 
 ```flextag
-[[section_id
+[[#section
   count:int="42"        // String "42" converted to integer 42
   id:str=123            // Number 123 converted to string "123"
   amount:float=42       // Integer 42 converted to float 42.0
@@ -431,9 +476,9 @@ When accessing parameters in Python code, the types are preserved:
 import flextag
 
 data = '''
-[[config name:str="app" version:float=1.5 active:bool=true]]
+[[#config name:str="app" version:float=1.5 active:bool=true]]
 Settings here
-[[/config]]
+[[/]]
 '''
 
 view = flextag.load(string=data)
@@ -451,43 +496,27 @@ print(type(params['active']))  # <class 'bool'>
 3. **Use Nullable Types** (`type?`) when parameters might be null
 4. **Be Consistent** with your approach to typing across your document
 
-## ⚠️ EXPERIMENTAL WARNING ⚠️
+## WARNING: EXPERIMENTAL
 
 > The FlexTag Schema System is highly experimental. It will be refined and likely completely rebuilt in future versions.
 
-# FlexTag and FTML Schema Systems
+# FlexTag Schema System
 
-FlexTag uses two distinct but complementary schema systems:
-
-1. **FlexTag Schema**: Controls section structure and metadata
-2. **FTML Schema**: Validates structured data within FTML sections
-
-## FlexTag Schema System
-
-The FlexTag schema system provides validation for the **document structure**:
-
-- Section **order and repetition**
-- Required **metadata** (IDs, tags, paths, parameters)
-- Section **content types** (text, binary, or markup types like ftml)
-
-### FlexTag Schema Definition
-
-A FlexTag schema is defined in a special section at the start of a document:
+FlexTag uses `---schema---` blocks to define validation rules for sections:
 
 ```flextag
-[[]]: schema
-[notes #draft /]?: text         # Optional section with specific tag
-[config #settings]: ftml        # Required section with FTML content
-[entry #data @items /]*: ftml   # Zero or more sections with specific metadata
-[[/]]
+---schema---
+[[#notes #draft]]+: text
+[[#config]]: yaml
+---/schema---
 ```
 
-### FlexTag Schema Syntax
+### Schema Syntax
 
-Each line defines a rule for a section:
+Each line defines a rule for sections:
 
 ```
-[section_id #tags @paths param=val /]?: content_type
+[[#tag1 #tag2 @path]]+: content_type
 ```
 
 With repetition modifiers:
@@ -505,24 +534,6 @@ The FTML schema system validates **structured data** within FTML sections:
 - **Unions** for multiple allowed types
 - **Default values** for optional fields
 
-### FTML Schema Definition
-
-FTML schemas can be defined in a schema section:
-
-```flextag
-[[]]: schema
-[config]: ftml
-  name: str<min_length=2>
-  age?: int<min=0> = 18
-  tags: [str]<min=1>
-  address: {
-    street: str,
-    city: str,
-    zip: str<pattern="[0-9]{5}">
-  }
-[[/]]
-```
-
 ### FTML Schema Types
 
 FTML schemas support various types:
@@ -534,49 +545,11 @@ FTML schemas support various types:
 - **Optional fields**: With question mark `field?:`
 - **Default values**: With equals sign `field: type = default`
 
-## Working with Both Schema Systems
-
-When using FlexTag with FTML content:
-
-1. **Define FlexTag schema** to validate document structure:
-   ```flextag
-   [[]]: schema
-   [config]: ftml
-   [logs]*: text
-   [[/]]
-   ```
-
-2. **Define FTML schema** to validate structured data:
-   ```flextag
-   [[]]: schema
-   [config]: ftml
-   // FTML schema here
-   user: {
-     name: str,
-     age: int<min=0>
-   }
-   [[/]]
-   ```
-
-3. **Create sections** following the schemas:
-   ```flextag
-   [[config]]: ftml
-   user: {
-     name: "John",
-     age: 30
-   }
-   [[/config]]
-   
-   [[logs]]: text
-   System started at 2023-01-01
-   [[/logs]]
-   ```
-
 ## Validation Process
 
 When you call `FlexTag.load(..., validate=True)`, the system:
 
-1. Validates the FlexTag document structure against the FlexTag schema
+1. Validates the FlexTag document structure against the schema
 2. For each FTML section, validates its content against the FTML schema (if provided)
 
 This layered approach allows comprehensive validation from document structure down to individual data fields.
