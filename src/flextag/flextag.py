@@ -168,6 +168,13 @@ class FlexTagSettings:
 
 
 ##############################################################################
+# CONTENT TYPES
+##############################################################################
+
+# Basic content types (non-markup)
+BASIC_TYPES = {"text", "binary"}
+
+##############################################################################
 # PARSING HELPERS
 ##############################################################################
 
@@ -520,7 +527,7 @@ class SchemaRule:
     Stores info about one section rule:
       - section_id
       - required tags, paths, params
-      - type_name: "raw", "ftml", etc.
+      - type_name: "text", "ftml", etc.
       - repetition: '?', '*', '+', or none
       - content_fields: an extended dict describing each field if ftml
     """
@@ -538,7 +545,7 @@ class SchemaRule:
         self.tags = tags
         self.paths = paths
         self.parameters = parameters
-        self.type_name = type_name.lower() if type_name else "raw"
+        self.type_name = type_name.lower() if type_name else "text"
         self.repetition_symbol = repetition_symbol  # '?' | '*' | '+' | None
 
         # For FTML content constraints, you can store structured fields here
@@ -599,7 +606,7 @@ class ExtendedSchemaParser:
             if m:
                 bracket_str = m.group(1)  # e.g. "id #tag @path key=val /"
                 repetition_symbol = m.group(2)  # ? + *
-                type_decl = m.group(3)  # "ftml" or "raw"
+                type_decl = m.group(3)  # "ftml" or "text"
 
                 # parse bracket metadata
                 sec_id, sec_tags, sec_paths, sec_params, is_self_closing = (
@@ -1083,8 +1090,8 @@ class Section:
         self.raw_paths = paths[:]
         self.raw_parameters = dict(parameters)
         self.raw_type_name = (
-            type_name.strip() if type_name else "raw"
-        )  # Default to 'raw' instead of 'yaml'
+            type_name.strip() if type_name else "text"
+        )  # Default to 'text'
         self.open_line = open_line
         self.close_line = close_line
         self.is_self_closing = is_self_closing
@@ -1132,7 +1139,7 @@ class Section:
     @property
     def type_name(self) -> str:
         if (
-            not self.raw_type_name or self.raw_type_name == "raw"
+            not self.raw_type_name or self.raw_type_name == "text"
         ) and self.inherited_type:
             return self.inherited_type
         return self.raw_type_name
@@ -1156,7 +1163,7 @@ class Section:
 
     def _parse_content(self) -> Any:
         """
-        Parse content based on type_name: 'raw', 'ftml', 'yaml', 'json', 'toml', etc.
+        Parse content based on type_name: 'text', 'binary', 'ftml', 'yaml', 'json', 'toml', etc.
         'container', 'defaults', 'schema' handle separately in Container.
         """
         raw = self.raw_content
@@ -1166,12 +1173,18 @@ class Section:
         if not raw:
             return ""
 
-        # Handle different content types
-        if tname == "raw" or tname == "":
-            # Raw content - return as-is
-            logger.debug(f"Parsing section ID='{self.id}' as raw text.")
+        # Handle basic content types
+        if tname == "text" or tname == "":
+            # Text content - return as-is
+            logger.debug(f"Parsing section ID='{self.id}' as text.")
             return raw
 
+        elif tname == "binary":
+            # Binary content - convert to bytes using surrogateescape
+            logger.debug(f"Parsing section ID='{self.id}' as binary.")
+            return raw.encode("utf-8", errors="surrogateescape")
+
+        # Handle markup content types
         elif tname == "ftml":
             # Parse with FTML library
             try:
@@ -1217,10 +1230,10 @@ class Section:
             # For container type, return lines for Container to process
             return raw.splitlines()
 
-        # Default: treat unknown types as raw content with a warning
+        # Default: treat unknown types as text with a warning
         else:
             logger.warning(
-                f"Unknown content type '{tname}' in section '{self.id}', treating as raw."
+                f"Unknown content type '{tname}' in section '{self.id}', treating as text."
             )
             return raw
 
@@ -2074,13 +2087,13 @@ class FlexView:
                 continue
 
             # Build the object to store
-            if stype == "raw":
+            if stype in BASIC_TYPES or stype == "":
                 if sec.id == "":
-                    # anonymous raw => raw string
+                    # anonymous text/binary => content directly
                     item = sec.content
                 else:
-                    # raw with ID => {"__raw": "..."}
-                    item = {"__raw": sec.content}
+                    # text/binary with ID => {"__text": content}
+                    item = {"__text": sec.content}
             elif stype in ("ftml", "yaml", "json", "toml"):
                 # parsed result can be list/dict/scalar
                 item = sec.content
@@ -2274,7 +2287,7 @@ class FlexTag:
     def _parse_source(self, src: str, source_name: str) -> Container:
         if os.path.exists(src) and os.path.isfile(src):
             logger.debug(f"Parsing file: {src}")
-            with open(src, "r", encoding=self.settings.encoding) as f:
+            with open(src, "r", encoding="utf-8", errors="surrogateescape") as f:
                 lines = f.readlines()
         else:
             logger.debug("Parsing raw string input.")

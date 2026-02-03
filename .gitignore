@@ -2,6 +2,7 @@
 .venv/
 
 # Ignore the coverage report file
+.coverage
 .coverage/
 
 # Python cache

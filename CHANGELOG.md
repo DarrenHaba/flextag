@@ -1,5 +1,30 @@
+## [0.4.0a1] - 2026-02-03
+### BREAKING CHANGES
+- Renamed `raw` content type to `text` (default type for sections without explicit type)
+- Removed encoding types: `utf-8`, `latin-1`, `ascii`, `utf-16` and their aliases
+- `to_dict()` now uses `__text` key instead of `__raw` for text sections
+
+### Added
+- `binary` content type for raw byte data (returns `bytes` instead of `str`)
+- Multi-Python version CI testing (3.10, 3.11, 3.12, 3.13)
+- Cross-platform CI testing (Ubuntu, Windows, macOS)
+- `noxfile.py` for local multi-version testing
+- pytest runs on pre-commit hook
+
+### Changed
+- Default section type is now `text` (functionally same as old `raw`)
+- Simplified content type system: just `text`, `binary`, and markup types (json, yaml, toml, ftml)
+
+### Removed
+- Unused dependencies: duckdb, numpy, ftml, tomli-w
+- Encoding type aliases and re-encoding logic
+
+### Fixed
+- `to_dict()` now correctly routes text/binary sections through `sec.content`
+- Made `tomli` conditional (only installed for Python < 3.11)
+
 ## [0.3.0a1] - 2025-05-20
-### ⚠️ BREAKING CHANGES
+### BREAKING CHANGES
 - Complete restructuring of the FlexTag API and syntax
 - No backward compatibility with 0.2.x versions
 - Removed all deprecated features and legacy syntax
@@ -26,7 +51,7 @@
 
 ## [0.2.2] - 2024-10-17
 ### Added
-- Added links to documentation. 
+- Added links to documentation.
 - Updated documentation to fix anchor issues in the README.
 
 ## [0.2.1] - 2024-10-17

@@ -11,7 +11,7 @@ class TestSection:
             tags=[],
             paths=[],
             parameters={},
-            type_name="raw",
+            type_name="text",
             open_line=0,
             close_line=2,
             is_self_closing=False,
@@ -71,15 +71,15 @@ class TestSection:
             tags=[],
             paths=[],
             parameters={},
-            type_name="raw",  # Default
+            type_name="text",  # Default
             open_line=0,
             close_line=1,
             is_self_closing=False,
             all_lines=["[[sec]]", "[[/sec]]"],
         )
 
-        # Should use raw type if specified
-        assert section.type_name == "raw"
+        # Should use text type if specified
+        assert section.type_name == "text"
 
         # Should use inherited type only if raw type is empty/text
         section.inherited_type = "yaml"

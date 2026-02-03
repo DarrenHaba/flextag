@@ -1,6 +1,8 @@
 import pytest
 import flextag
 
+ftml = pytest.importorskip("ftml", reason="ftml package not installed")
+
 
 class TestFTMLWithFlexTag:
     """Test suite for FTML (FlexTag Markup Language) content type with FlexTag parsing."""

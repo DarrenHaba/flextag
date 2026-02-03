@@ -6,6 +6,15 @@ import tempfile
 
 from flextag import FlexTag, SchemaTypeError, SchemaSectionError
 
+try:
+    import ftml
+
+    HAS_FTML = True
+except ImportError:
+    HAS_FTML = False
+
+requires_ftml = unittest.skipUnless(HAS_FTML, "ftml package not installed")
+
 
 class TestFlexTagBasics(unittest.TestCase):
     """Basic FlexTag functionality tests."""
@@ -33,22 +42,23 @@ class TestFlexTagBasics(unittest.TestCase):
         self.assertEqual(len(view.sections), 1)
         section = view.sections[0]
         self.assertEqual(section.id, "test")
-        self.assertEqual(section.type_name, "raw")  # Default type is raw
+        self.assertEqual(section.type_name, "text")  # Default type is text
         self.assertIn("This is raw content", section.content)
         self.assertIn("that spans multiple lines", section.content)
 
-    def test_explicit_raw_content(self):
-        """Test explicit raw content type."""
+    def test_explicit_text_content(self):
+        """Test explicit text content type."""
         data = """
-        [[test]]: raw
-        This is explicit raw content
+        [[test]]: text
+        This is explicit text content
         [[/test]]
         """
         view = FlexTag.load(string=data, validate=False)
         section = view.sections[0]
-        self.assertEqual(section.type_name, "raw")
-        self.assertIn("This is explicit raw content", section.content)
+        self.assertEqual(section.type_name, "text")
+        self.assertIn("This is explicit text content", section.content)
 
+    @requires_ftml
     def test_ftml_content(self):
         """Test FTML content parsing."""
         data = """
@@ -118,7 +128,7 @@ class TestFlexTagSchema(unittest.TestCase):
         """Test traditional schema validation (success case)."""
         data = """
         [[]]: schema
-        [notes #draft]+: raw
+        [notes #draft]+: text
         [[/]]
 
         [[notes #draft]]
@@ -135,7 +145,7 @@ class TestFlexTagSchema(unittest.TestCase):
         """Test traditional schema validation (failure case)."""
         data = """
         [[]]: schema
-        [notes #draft]+: raw
+        [notes #draft]+: text
         [[/]]
 
         [[notes]]
@@ -152,13 +162,14 @@ class TestFlexTagSchema(unittest.TestCase):
         [config]: ftml
         [[/]]
 
-        [[config]]: raw
+        [[config]]: text
         Should be FTML content
         [[/config]]
         """
         with self.assertRaises(SchemaTypeError):
             FlexTag.load(string=data, validate=True)
 
+    @requires_ftml
     def test_ftml_schema_syntax(self):
         """Test FTML schema syntax recognition."""
         data = """
@@ -185,6 +196,7 @@ class TestFlexTagSchema(unittest.TestCase):
 class TestFlexTagToDict(unittest.TestCase):
     """Test dictionary conversion."""
 
+    @requires_ftml
     def test_basic_to_dict(self):
         """Test basic to_dict conversion."""
         data = """
@@ -193,7 +205,7 @@ model_name = "GPT-4"
 max_tokens = 8192
 [[/config]]
 
-[[notes]]: raw
+[[notes]]: text
 This is a note
 [[/notes]]
 """
@@ -202,8 +214,9 @@ This is a note
 
         self.assertEqual(result["config"]["model_name"], "GPT-4")
         self.assertEqual(result["config"]["max_tokens"], 8192)
-        self.assertEqual(result["notes"]["__raw"], "This is a note")
+        self.assertEqual(result["notes"]["__text"], "This is a note")
 
+    @requires_ftml
     def test_repeated_sections_to_dict(self):
         """Test to_dict with repeated sections."""
         data = """
@@ -224,6 +237,7 @@ This is a note
         self.assertEqual(result["item"][0]["name"], "Item 1")
         self.assertEqual(result["item"][1]["name"], "Item 2")
 
+    @requires_ftml
     def test_nested_paths_to_dict(self):
         """Test to_dict with nested paths."""
         data = """
@@ -308,6 +322,7 @@ class TestFlexTagFilter(unittest.TestCase):
         self.assertEqual(len(filtered.sections), 1)
         self.assertEqual(filtered.sections[0].id, "one")
 
+    @requires_ftml
     def test_basic_to_dict(self):
         """Test basic to_dict conversion."""
         data = """
@@ -316,7 +331,7 @@ model_name = "GPT-4"
 max_tokens = 8192
 [[/config]]
 
-[[notes]]: raw
+[[notes]]: text
 This is a note
 [[/notes]]
 """
@@ -325,7 +340,7 @@ This is a note
 
         self.assertEqual(result["config"]["model_name"], "GPT-4")
         self.assertEqual(result["config"]["max_tokens"], 8192)
-        self.assertEqual(result["notes"]["__raw"], "This is a note")
+        self.assertEqual(result["notes"]["__text"], "This is a note")
 
     def test_complex_filter(self):
         """Test complex filtering."""
