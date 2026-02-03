@@ -1,10 +1,8 @@
-import unittest
-from unittest.mock import patch
-import json
 import os
 import tempfile
+import unittest
 
-from flextag import FlexTag, SchemaTypeError, SchemaSectionError
+from flextag import FlexTag, SchemaSectionError, SchemaTypeError
 
 try:
     import ftml
@@ -193,63 +191,6 @@ class TestFlexTagSchema(unittest.TestCase):
         self.assertEqual(view.sections[0].content["model_name"], "GPT-4")
 
 
-class TestFlexTagToDict(unittest.TestCase):
-    """Test dictionary conversion."""
-
-    @requires_ftml
-    def test_basic_to_dict(self):
-        """Test basic to_dict conversion."""
-        data = """
-[[config]]: ftml
-model_name = "GPT-4"
-max_tokens = 8192
-[[/config]]
-
-[[notes]]: text
-This is a note
-[[/notes]]
-"""
-        view = FlexTag.load(string=data, validate=False)
-        result = view.to_dict()
-
-        self.assertEqual(result["config"]["model_name"], "GPT-4")
-        self.assertEqual(result["config"]["max_tokens"], 8192)
-        self.assertEqual(result["notes"]["__text"], "This is a note")
-
-    @requires_ftml
-    def test_repeated_sections_to_dict(self):
-        """Test to_dict with repeated sections."""
-        data = """
-        [[item]]: ftml
-        name = "Item 1"
-        value = 100
-        [[/item]]
-
-        [[item]]: ftml
-        name = "Item 2"
-        value = 200
-        [[/item]]
-        """
-        view = FlexTag.load(string=data, validate=False)
-        result = view.to_dict()
-        self.assertIsInstance(result["item"], list)
-        self.assertEqual(len(result["item"]), 2)
-        self.assertEqual(result["item"][0]["name"], "Item 1")
-        self.assertEqual(result["item"][1]["name"], "Item 2")
-
-    @requires_ftml
-    def test_nested_paths_to_dict(self):
-        """Test to_dict with nested paths."""
-        data = """
-        [[level1.level2.item]]: ftml
-        name = "Nested Item"
-        [[/level1.level2.item]]
-        """
-        view = FlexTag.load(string=data, validate=False)
-        result = view.to_dict()
-        self.assertEqual(result["level1"]["level2"]["item"]["name"], "Nested Item")
-
-
 class TestFlexTagFile(unittest.TestCase):
     """Tests for file loading and saving."""
 
@@ -322,26 +263,6 @@ class TestFlexTagFilter(unittest.TestCase):
         self.assertEqual(len(filtered.sections), 1)
         self.assertEqual(filtered.sections[0].id, "one")
 
-    @requires_ftml
-    def test_basic_to_dict(self):
-        """Test basic to_dict conversion."""
-        data = """
-[[config]]: ftml
-model_name = "GPT-4"
-max_tokens = 8192
-[[/config]]
-
-[[notes]]: text
-This is a note
-[[/notes]]
-"""
-        view = FlexTag.load(string=data, validate=False)
-        result = view.to_dict()
-
-        self.assertEqual(result["config"]["model_name"], "GPT-4")
-        self.assertEqual(result["config"]["max_tokens"], 8192)
-        self.assertEqual(result["notes"]["__text"], "This is a note")
-
     def test_complex_filter(self):
         """Test complex filtering."""
         data = """
@@ -370,47 +291,6 @@ This is a note
         ids = [s.id for s in filtered.sections]
         self.assertIn("two", ids)
         self.assertIn("three", ids)
-
-
-class TestFlexMapAndPoint(unittest.TestCase):
-    """Tests for FlexMap and FlexPoint."""
-
-    def test_flexmap_basic(self):
-        """Test basic FlexMap functionality."""
-        data = """
-[[section1]]
-content 1
-[[/section1]]
-
-[[section2]]
-content 2
-[[/section2]]
-"""
-        view = FlexTag.load(string=data, validate=False)
-        fm = view.to_flexmap()
-
-        self.assertIn("section1", fm)
-        self.assertIn("section2", fm)
-        self.assertEqual(fm["section1"].sections[0].content, "content 1")
-        self.assertEqual(fm["section2"].sections[0].content, "content 2")
-
-    def test_flexmap_nested(self):
-        """Test nested paths in FlexMap."""
-        data = """
-[[level1.level2.section]]
-nested content
-[[/level1.level2.section]]
-"""
-        view = FlexTag.load(string=data, validate=False)
-        fm = view.to_flexmap()
-
-        self.assertIn("level1", fm)
-        self.assertIn("level2", fm["level1"].children)
-        self.assertIn("section", fm["level1"].children["level2"].children)
-        self.assertEqual(
-            fm["level1"].children["level2"].children["section"].sections[0].content,
-            "nested content",
-        )
 
 
 if __name__ == "__main__":

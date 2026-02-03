@@ -1,4 +1,5 @@
 import pytest
+
 import flextag
 
 ftml = pytest.importorskip("ftml", reason="ftml package not installed")
@@ -33,10 +34,6 @@ version = null
         assert content["debug"] is True
         assert content["port"] == 8080
         assert content["version"] is None
-
-        # Test dict conversion
-        data = view.to_dict()
-        assert data["simple_config"]["name"] == "Simple Config"
 
     def test_ftml_with_comments(self):
         """Test FTML comment syntax with // instead of #."""
@@ -217,8 +214,7 @@ examples = [
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["tricky_ftml"]
+        config = view.sections[0].content
 
         # Verify bracket strings are preserved as FTML content, not parsed as FlexTag sections
         assert "[[double brackets]]" in config["description"]
@@ -271,8 +267,7 @@ preferences: {
 
         try:
             view = flextag.load(string=test_string, validate=True)
-            data = view.to_dict()
-            user = data["user_config"]
+            user = view.sections[0].content
 
             # Verify data structure
             assert user["name"] == "John Doe"
@@ -305,14 +300,13 @@ features = ["validation", "comments", "schemas"]
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
+        sections = [s for s in view.sections if s.id == "config"]
 
-        # Multiple sections with same ID should become a list
-        assert isinstance(data["config"], list)
-        assert len(data["config"]) == 2
-        assert data["config"][0]["version"] == 1
-        assert data["config"][1]["version"] == 2
-        assert len(data["config"][1]["features"]) == 3
+        # Multiple sections with same ID
+        assert len(sections) == 2
+        assert sections[0].content["version"] == 1
+        assert sections[1].content["version"] == 2
+        assert len(sections[1].content["features"]) == 3
 
     def test_ftml_mixed_with_other_formats(self):
         """Test FTML sections alongside other format types."""
@@ -349,18 +343,18 @@ comparison = {
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
 
-        # Test mixed formats
-        configs = data["config"]
+        # Test mixed formats - get sections by ID
+        configs = [s for s in view.sections if s.id == "config"]
         assert len(configs) == 2
-        assert configs[0]["format"] == "ftml"
-        assert configs[1]["format"] == "json"
-        assert configs[0]["metadata"]["author"] == "FTML"
-        assert configs[1]["metadata"]["author"] == "JSON"
+        assert configs[0].content["format"] == "ftml"
+        assert configs[1].content["format"] == "json"
+        assert configs[0].content["metadata"]["author"] == "FTML"
+        assert configs[1].content["metadata"]["author"] == "JSON"
 
         # Test summary section
-        summary = data["summary"]
+        summary_section = [s for s in view.sections if s.id == "summary"][0]
+        summary = summary_section.content
         assert summary["total_configs"] == 2
         assert "ftml" in summary["formats"]
         assert "json" in summary["formats"]
@@ -525,8 +519,8 @@ application = {
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        app = data["complex_structure"]["application"]
+        content = view.sections[0].content
+        app = content["application"]
 
         # Test basic app info
         assert app["name"] == "MyApp"

@@ -1,4 +1,5 @@
 import pytest
+
 import flextag
 
 
@@ -34,10 +35,6 @@ class TestJSONWithFlexTag:
         assert content["port"] == 8080
         assert content["version"] is None
 
-        # Test dict conversion
-        data = view.to_dict()
-        assert data["simple_config"]["name"] == "Simple Config"
-
     def test_complex_json_structures(self):
         """Test complex nested JSON structures."""
         test_string = """
@@ -67,8 +64,7 @@ class TestJSONWithFlexTag:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["complex_config"]
+        config = view.sections[0].content
 
         # Test nested object access
         assert config["app_name"] == "My App"
@@ -104,8 +100,7 @@ class TestJSONWithFlexTag:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["tricky_json"]
+        config = view.sections[0].content
 
         # Verify bracket strings are preserved as content, not parsed as sections
         assert "[[double brackets]]" in config["description"]
@@ -135,13 +130,12 @@ class TestJSONWithFlexTag:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
+        configs = [s for s in view.sections if s.id == "config"]
 
-        # Multiple sections with same ID should become a list
-        assert isinstance(data["config"], list)
-        assert len(data["config"]) == 2
-        assert data["config"][0]["version"] == 1
-        assert data["config"][1]["version"] == 2
+        # Multiple sections with same ID
+        assert len(configs) == 2
+        assert configs[0].content["version"] == 1
+        assert configs[1].content["version"] == 2
 
     def test_json_mixed_with_other_formats(self):
         """Test JSON sections alongside other format types."""
@@ -169,16 +163,15 @@ data:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
+        configs = [s for s in view.sections if s.id == "config"]
+        summary = [s for s in view.sections if s.id == "summary"][0].content
 
         # Test mixed formats
-        configs = data["config"]
         assert len(configs) == 2
-        assert configs[0]["format"] == "json"
-        assert configs[1]["format"] == "yaml"
+        assert configs[0].content["format"] == "json"
+        assert configs[1].content["format"] == "yaml"
 
         # Test summary section
-        summary = data["summary"]
         assert summary["total_configs"] == 2
         assert "json" in summary["formats"]
         assert "yaml" in summary["formats"]

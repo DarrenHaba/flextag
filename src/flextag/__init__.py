@@ -3,25 +3,23 @@ FlexTag - Public API
 
 This module provides the main entry points for the FlexTag library:
 - load(...) -> parse FlexTag data into a FlexView with rich querying abilities
-- to_dict(...) -> convert a FlexView to a simplified Python dict
 - validate(...) -> validate FlexTag content against schema rules
 - filter(...) -> filter sections or containers using query language
 """
 
-from typing import Optional, Union, Dict, Any, List
+from typing import List, Optional, Union
 
 from .flextag import (
     FlexTag,
-    FlexView,
-    FlexTagSettings,
-    FlexMap,
     FlexTagError,
+    FlexTagSettings,
     FlexTagSyntaxError,
-    SchemaValidationError,
-    SchemaTypeError,
+    FlexView,
     SchemaSectionError,
+    SchemaTypeError,
+    SchemaValidationError,
+    logger,
 )
-from .flextag import logger
 
 # Version constants
 FLEXTAG_VERSION = "0.4.0a1"  # The FlexTag specification version
@@ -39,12 +37,12 @@ def get_package_version():
 
 
 def load(
-    path: Union[str, List[str], None] = None,
-    string: Union[str, List[str], None] = None,
-    dir: Union[str, List[str], None] = None,
-    filter_query: Optional[str] = None,
+    path: str | list[str] | None = None,
+    string: str | list[str] | None = None,
+    dir: str | list[str] | None = None,
+    filter_query: str | None = None,
     validate: bool = True,
-    settings: Optional[FlexTagSettings] = None,
+    settings: FlexTagSettings | None = None,
 ) -> FlexView:
     """
     Parse FlexTag data from files, strings, or directories.
@@ -73,32 +71,6 @@ def load(
         validate=validate,
         settings=settings,
     )
-
-
-def to_dict(view: FlexView) -> Dict[str, Any]:
-    """
-    Convert a FlexView to a simplified Python dictionary.
-
-    Args:
-        view: The FlexView object to convert
-
-    Returns:
-        A dictionary containing the structured data from the FlexView
-    """
-    return view.to_dict()
-
-
-def to_flexmap(view: FlexView) -> FlexMap:
-    """
-    Convert a FlexView to a FlexMap with enhanced navigation capabilities.
-
-    Args:
-        view: The FlexView object to convert
-
-    Returns:
-        A FlexMap providing advanced access to the structured data
-    """
-    return view.to_flexmap()
 
 
 def filter(view: FlexView, query: str, target: str = "sections") -> FlexView:
@@ -137,12 +109,9 @@ def configure_settings(**kwargs) -> FlexTagSettings:
 # Make these available in the public API
 __all__ = [
     "load",
-    "to_dict",
-    "to_flexmap",
     "filter",
     "configure_settings",
     "FlexView",
-    "FlexMap",
     "FlexTagSettings",
     "FlexTagError",
     "FlexTagSyntaxError",

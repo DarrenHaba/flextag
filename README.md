@@ -259,54 +259,39 @@ cache_prod_staging = view.filter("@database.cache #production OR #staging")
 v2_configs = view.filter('#v2 OR ver>=2.0 ver<3.0')
 ```
 
-## Converting to Dictionary
+## Accessing Sections
 
-FlexTag views can be converted to Python dictionaries:
+Access sections directly through the view:
 
-```python
-# Convert entire view
-all_configs = view.to_dict()
-
-# Access by ID
-app_config = all_configs['app_config']
-
-# Sections with the same ID become lists
-for db in all_configs['database']:
-    print(db['host'])
-```
-
-## Anonymous Sections (No ID)
-Sections without IDs are also supported:
 ```python
 import flextag
 
-# Sections can have IDs or be anonymous
-unified_config = """
-[[with_id]]: ftml
-key = "Section with ID"
-[[/with_id]]
+config = """
+[[database #production]]: yaml
+host: prod-db.company.com
+port: 5432
+[[/database]]
 
-[[]]: ftml
-key = "Section without ID"
-[[/]]
-
-[[]]: ftml
-key = "Section without ID"
-[[/]]
+[[database #development]]: yaml
+host: localhost
+port: 5432
+[[/database]]
 """
 
-view = flextag.load(string=unified_config)
-d = view.to_dict()
-print(d)
-# {'with_id': {'key': 'Section with ID'}, '': {'key': 'Section without ID'}}
+view = flextag.load(string=config)
 
-# Access a named section directly
-print(d['with_id'])
-# {'key': 'Section with ID'}
+# Access all sections
+for section in view.sections:
+    print(section.id, section.content)
 
-# Anonymous sections are always in a list under the empty string key
-print(d[''])
-# {'key': 'Section without ID'}
+# Filter by tag
+prod_sections = view.filter("#production")
+for section in prod_sections.sections:
+    print(section.content["host"])  # prod-db.company.com
+
+# Get sections by ID
+db_sections = [s for s in view.sections if s.id == "database"]
+print(len(db_sections))  # 2
 ```
 
 ## Complete Document Example
@@ -574,56 +559,6 @@ When you call `FlexTag.load(..., validate=True)`, the system:
 This layered approach allows comprehensive validation from document structure down to individual data fields.
 
 
-
-
-
-
-## Deprecated Features
-
-### FlexMap and FlexPoint
-
-The `FlexMap` and `FlexPoint` classes, along with the `to_flexmap()` method, are deprecated and should not be used in new code. These features create a complex nested structure that is difficult to work with.
-
-Instead, use one of these recommended approaches:
-
-1. **Convert to Dictionary**: Use `view.to_dict()` to get a standard Python dictionary representation of your sections.
-
-   ```python
-   data = view.to_dict()
-   ```
-
-2. **Iterate Over Sections**: Directly iterate over the sections in the view.
-
-   ```python
-   for section in view.sections:
-       print(section.id, section.content)
-   ```
-
-3. **Filter and Query**: Use the filtering capabilities to get just the sections you need.
-
-   ```python
-   filtered = view.filter("#production @app.backend")
-   ```
-
-### Help Classes (Already Removed)
-
-The following help-related classes have already been removed from newer versions of FlexTag:
-
-- `FlexHelpBase`: Base class with shared table formatting logic
-- `SectionHelp`: Generated formatted help text for Section objects
-- `FlexPointHelp`: Generated structured information about FlexPoint objects
-- `FlexMapHelp`: Produced tabular summaries of FlexMap contents
-
-These classes supported the `.help` property that was available on FlexMap and FlexPoint objects, which would generate formatted text output showing the structure, available sections, and access paths. Usage looked like:
-
-```python
-# Old usage pattern (no longer supported)
-fm = view.to_flexmap()
-print(fm.help)  # Would print a table of available paths
-print(fm["items"].help)  # Would print info about the FlexPoint at "items"
-```
-
-The FlexMap/FlexPoint approach and all associated help functionality will be completely removed in a future version.
 
 ## Contributing
 

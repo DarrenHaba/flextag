@@ -1,16 +1,11 @@
-import collections
 import json
+import logging
 import os
 import re
 import shlex
-import logging
 from collections import deque
 from typing import (
-    List,
-    Dict,
     Any,
-    Union,
-    Optional,
 )
 
 ##############################################################################
@@ -202,7 +197,7 @@ def add_error_pointer(line_content, column_num):
 
 
 def _collect_multiline_bracket_block(
-    lines: List[str],
+    lines: list[str],
     start_index: int,
     source_name: str,
     open_seq: str = "[[",
@@ -535,11 +530,11 @@ class SchemaRule:
     def __init__(
         self,
         section_id: str,
-        tags: List[str],
-        paths: List[str],
-        parameters: Dict[str, Any],
+        tags: list[str],
+        paths: list[str],
+        parameters: dict[str, Any],
         type_name: str,
-        repetition_symbol: Optional[str] = None,
+        repetition_symbol: str | None = None,
     ):
         self.section_id = section_id
         self.tags = tags
@@ -586,7 +581,7 @@ class ExtendedSchemaParser:
     def __init__(self, source_name: str):
         self.source_name = source_name
 
-    def parse_schema_block(self, lines: List[str]) -> List[SchemaRule]:
+    def parse_schema_block(self, lines: list[str]) -> list[SchemaRule]:
         """
         Parse lines from the schema section,
         building a list of SchemaRule objects, each describing
@@ -720,7 +715,7 @@ def parse_toml(content: str) -> Any:
         raise FlexTagSyntaxError(f"TOML parsing error: {e}")
 
 
-def validate_ftml(content: str, schema: str) -> List[str]:
+def validate_ftml(content: str, schema: str) -> list[str]:
     """
     Validate FTML content against the schema using the actual FTML library.
     Takes the raw FTML content string, not parsed data.
@@ -732,7 +727,7 @@ def validate_ftml(content: str, schema: str) -> List[str]:
 
     try:
         # Validate the raw FTML content directly against the schema
-        logger.debug(f"Validating FTML content against schema")
+        logger.debug("Validating FTML content against schema")
         ftml.load(content, schema=schema)
         return []
     except Exception as e:
@@ -792,8 +787,8 @@ class FlexParser:
         pass
 
     def parse_bracket_sections(
-        self, lines: List[str], source_name: str
-    ) -> List[Dict[str, Any]]:
+        self, lines: list[str], source_name: str
+    ) -> list[dict[str, Any]]:
         """
         Enhanced version that correctly handles 'container' sections and extracts their metadata.
         """
@@ -916,7 +911,7 @@ class FlexParser:
 
         return sections  # Return after processing ALL sections, not just the first one
 
-    def _parse_container_metadata(self, raw_content: str) -> Dict[str, Any]:
+    def _parse_container_metadata(self, raw_content: str) -> dict[str, Any]:
         """
         Parses the raw content of a container section to extract metadata.
         This assumes a simple key=value format within the container.
@@ -1075,14 +1070,14 @@ class Section:
     def __init__(
         self,
         section_id: str,
-        tags: List[str],
-        paths: List[str],
-        parameters: Dict[str, Any],
+        tags: list[str],
+        paths: list[str],
+        parameters: dict[str, Any],
         type_name: str,
         open_line: int,
         close_line: int,
         is_self_closing: bool,
-        all_lines: List[str],
+        all_lines: list[str],
         source_name: str = "",
     ):
         self.raw_id = section_id
@@ -1099,11 +1094,11 @@ class Section:
         self._parsed_cache = None
 
         self.source_name = source_name
-        self.inherited_id: Optional[str] = None
-        self.inherited_tags: List[str] = []
-        self.inherited_paths: List[str] = []
-        self.inherited_params: Dict[str, Any] = {}
-        self.inherited_type: Optional[str] = None
+        self.inherited_id: str | None = None
+        self.inherited_tags: list[str] = []
+        self.inherited_paths: list[str] = []
+        self.inherited_params: dict[str, Any] = {}
+        self.inherited_type: str | None = None
 
     def __repr__(self):
         return f"<Section ID={self.id!r} type={self.type_name!r}>"
@@ -1115,7 +1110,7 @@ class Section:
         return self.inherited_id or ""
 
     @property
-    def tags(self) -> List[str]:
+    def tags(self) -> list[str]:
         out = list(self.inherited_tags)
         for t in self.raw_tags:
             if t not in out:
@@ -1123,7 +1118,7 @@ class Section:
         return out
 
     @property
-    def paths(self) -> List[str]:
+    def paths(self) -> list[str]:
         out = list(self.inherited_paths)
         for p in self.raw_paths:
             if p not in out:
@@ -1131,7 +1126,7 @@ class Section:
         return out
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         out = dict(self.inherited_params)
         out.update(self.raw_parameters)
         return out
@@ -1248,20 +1243,20 @@ class Container:
     All other sections: user sections.
     """
 
-    def __init__(self, sections: List[Section], source_name: str):
+    def __init__(self, sections: list[Section], source_name: str):
         self.source_name = source_name
         self.raw_sections = sections[:]
-        self.sections: List[Section] = []
-        self.container_metadata: Optional[Section] = None
-        self.defaults: Optional[Section] = None
-        self.schema: Optional[Section] = None
-        self.schema_rules: List[SchemaRule] = []
-        self.ftml_schema: Dict[str, Any] = {}  # New: holds parsed FTML schema
+        self.sections: list[Section] = []
+        self.container_metadata: Section | None = None
+        self.defaults: Section | None = None
+        self.schema: Section | None = None
+        self.schema_rules: list[SchemaRule] = []
+        self.ftml_schema: dict[str, Any] = {}  # New: holds parsed FTML schema
 
         self.id: str = ""
-        self.tags: List[str] = []
-        self.paths: List[str] = []
-        self.parameters: Dict[str, Any] = {}
+        self.tags: list[str] = []
+        self.paths: list[str] = []
+        self.parameters: dict[str, Any] = {}
 
         for sec in self.raw_sections:
             stype = sec.type_name.lower()
@@ -1734,7 +1729,7 @@ class SectionCollection:
     Wraps a list of Section objects, giving them .help, etc.
     """
 
-    def __init__(self, sections: List[Section]):
+    def __init__(self, sections: list[Section]):
         self._sections = sections
 
     def __len__(self):
@@ -1752,7 +1747,7 @@ class ContainerCollection:
     Wraps a list of Container objects, allowing iteration and .help if needed.
     """
 
-    def __init__(self, containers: List[Container]):
+    def __init__(self, containers: list[Container]):
         self._containers = containers
 
     def __len__(self):
@@ -1766,73 +1761,6 @@ class ContainerCollection:
 
 
 ##############################################################################
-# FLEX POINT AND FLEX MAP
-##############################################################################
-
-
-class FlexPoint:
-    """
-    A node with one or more sections plus child nodes keyed by string.
-    """
-
-    def __init__(self, parent_map=None, full_path=""):
-        self.sections = []
-        self.children = {}
-        self._parent_map = parent_map
-        self._full_path = full_path
-
-    def add_section(self, sec: Section):
-        self.sections.append(sec)
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self.sections[key]
-        elif isinstance(key, str):
-            return self.children[key]
-        else:
-            raise KeyError(key)
-
-
-class FlexMap(dict):
-    """
-    A dictionary-like structure that organizes sections by ID or nested ID.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._all_rows = []
-
-    def load_all_rows(self):
-        """
-        Rebuild the self._all_rows from the nested structure.
-        """
-        self._all_rows.clear()
-        for k, v in self.items():
-            self._collect_point_rows(f'["{k}"]', v)
-
-    def _collect_point_rows(self, prefix: str, point: FlexPoint):
-        n = len(point.sections)
-        if n > 0:
-            # If same type or mixed
-            all_types = set(sec.type_name for sec in point.sections)
-            if len(all_types) == 1:
-                t = list(all_types)[0]
-            else:
-                t = "mixed"
-            if n == 1:
-                self._all_rows.append(
-                    (prefix + "[0]", t, f"[[{point.sections[0].id}]]: {t}")
-                )
-            else:
-                self._all_rows.append(
-                    (prefix + f"[0..{n-1}]", t, f"[[{point.sections[0].id}]] x{n}")
-                )
-        for child_key, child_point in point.children.items():
-            ch_prefix = prefix + f'["{child_key}"]'
-            self._collect_point_rows(ch_prefix, child_point)
-
-
-##############################################################################
 # FLEX VIEW
 ##############################################################################
 
@@ -1840,13 +1768,13 @@ class FlexMap(dict):
 class FlexView:
     """
     Top-level container for multiple Container objects.
-    You can filter or convert to a FlexMap, etc.
+    Provides filtering and section access capabilities.
     """
 
-    def __init__(self, containers: List[Container]):
+    def __init__(self, containers: list[Container]):
         self._containers = containers
-        self._raw_sections: List[Section] = []
-        self._user_sections: List[Section] = []
+        self._raw_sections: list[Section] = []
+        self._user_sections: list[Section] = []
 
         for c in containers:
             self._raw_sections.extend(c.raw_sections)
@@ -2058,158 +1986,6 @@ class FlexView:
         # else match by ID
         return token == sec.id
 
-    def to_dict(self) -> dict:
-        """
-        Returns a Python dictionary representing this FlexView's sections
-        in a simpler two-pass approach, ensuring repeated FTML lists
-        remain separate in a list-of-lists.
-
-        Rules:
-          1. Sections with no ID => data[""] is the content directly if there's only one,
-             or a list of contents if there are multiple.
-             (raw => string, ftml => parsed object)
-          2. Sections with an ID => data[id], or nested if using dot notation.
-             If repeated, becomes a list of objects; if single occurrence, just that object.
-             - raw => {"__raw": "..."}
-             - ftml => the parsed FTML (list/dict/scalar)
-        """
-
-        # -----------------------------------------------------------------------
-        # PASS 1: Collect all sections by ID in a dictionary of lists.
-        #         This lets us see if an ID was repeated.
-        # -----------------------------------------------------------------------
-        collected = collections.defaultdict(list)
-
-        for sec in self._raw_sections:
-            stype = sec.type_name.lower()
-            # Skip head sections
-            if stype in ("container", "defaults", "schema"):
-                continue
-
-            # Build the object to store
-            if stype in BASIC_TYPES or stype == "":
-                if sec.id == "":
-                    # anonymous text/binary => content directly
-                    item = sec.content
-                else:
-                    # text/binary with ID => {"__text": content}
-                    item = {"__text": sec.content}
-            elif stype in ("ftml", "yaml", "json", "toml"):
-                # parsed result can be list/dict/scalar
-                item = sec.content
-            else:
-                # fallback => raw content
-                item = sec.raw_content
-
-            # Append the item to the list for this ID
-            collected[sec.id].append(item)
-
-        # -----------------------------------------------------------------------
-        # PASS 2: Build the final nested structure.
-        #         - If an ID is repeated => store a list of items.
-        #         - If single occurrence => store that single item.
-        #         - Dot-splitting for nested IDs.
-        #         - Anonymous ID => handle like other IDs (single -> direct, multiple -> list)
-        # -----------------------------------------------------------------------
-        def insert_nested(root: dict, segs: list, final_obj: Any):
-            """Insert final_obj into root at segs. If segs is empty => root[""] list."""
-            if not segs:
-                # This would handle anonymous sections, but we bypass this for anonymous
-                # by handling them directly outside of insert_nested
-                return
-
-            node = root
-            for s in segs[:-1]:
-                if s not in node or not isinstance(node[s], dict):
-                    node[s] = {}
-                node = node[s]
-            last = segs[-1]
-            if last not in node:
-                node[last] = final_obj
-            else:
-                # If last is already used, convert to list or append
-                existing = node[last]
-                if isinstance(existing, list):
-                    existing.append(final_obj)
-                else:
-                    node[last] = [existing, final_obj]
-
-        result = {}
-
-        for id_val, items in collected.items():
-            if id_val == "":
-                # Handle anonymous sections directly
-                if len(items) == 1:
-                    result[""] = items[0]  # Store single item directly
-                else:
-                    result[""] = items  # Store multiple items as a list
-            else:
-                # Handle sections with IDs with the original approach
-                if len(items) == 1:
-                    final_obj = items[0]  # single item
-                else:
-                    final_obj = items  # repeated => entire list
-                segs = id_val.split(".")
-                insert_nested(result, segs, final_obj)
-
-        return result
-
-    def to_flexmap(self) -> "FlexMap":
-        """
-        Convert all raw_sections into a nested FlexMap.
-        If an ID is 'my_id' with no dots, we store the section
-        directly in fm["my_id"]. If an ID is 'my.nested.id', we nest
-        children accordingly.
-        """
-        logger.debug("Converting view to FlexMap.")
-        fm = FlexMap()
-
-        for sec in self._raw_sections:
-            # Skip head sections
-            s_type = sec.type_name.lower()
-            if s_type in ("container", "defaults", "schema"):
-                continue
-
-            # If section has no ID, skip or store in anonymous
-            if not sec.id:
-                continue
-
-            # Split on dot
-            segs = sec.id.split(".")
-            top_key = segs[0]
-
-            # Ensure a top-level FlexPoint for that top_key
-            if top_key not in fm:
-                fm[top_key] = FlexPoint(parent_map=fm, full_path=f'["{top_key}"]')
-
-            node = fm[top_key]
-            prefix = f'["{top_key}"]'
-
-            # If the ID has multiple segments (e.g. 'a.b.c'),
-            # descend into node.children for segs[1:-1].
-            for sub in segs[1:-1]:
-                if sub not in node.children:
-                    child_path = prefix + f'["{sub}"]'
-                    node.children[sub] = FlexPoint(parent_map=fm, full_path=child_path)
-                node = node.children[sub]
-                prefix += f'["{sub}"]'
-
-            # Now handle the last segment. If there's only 1 segment,
-            # we add the Section directly to the top-level node.
-            if len(segs) == 1:
-                node.add_section(sec)
-            else:
-                last_seg = segs[-1]
-                if last_seg not in node.children:
-                    child_path = prefix + f'["{last_seg}"]'
-                    node.children[last_seg] = FlexPoint(
-                        parent_map=fm, full_path=child_path
-                    )
-                node.children[last_seg].add_section(sec)
-
-        fm.load_all_rows()
-        return fm
-
 
 ##############################################################################
 # FLEXTAG
@@ -2221,19 +1997,19 @@ class FlexTag:
     Main entry point for loading .flextag or .ft files or raw strings.
     """
 
-    def __init__(self, settings: Optional[FlexTagSettings] = None):
+    def __init__(self, settings: FlexTagSettings | None = None):
         self._parser = FlexParser()
         self.settings = settings if settings else FlexTagSettings()
 
     @classmethod
     def load(
         cls,
-        path: Union[str, List[str], None] = None,
-        string: Union[str, List[str], None] = None,
-        dir: Union[str, List[str], None] = None,
-        filter_query: Optional[str] = None,
+        path: str | list[str] | None = None,
+        string: str | list[str] | None = None,
+        dir: str | list[str] | None = None,
+        filter_query: str | None = None,
         validate: bool = True,
-        settings: Optional[FlexTagSettings] = None,
+        settings: FlexTagSettings | None = None,
     ) -> FlexView:
         inst = cls(settings=settings)
         sources = inst._gather_sources(path, string, dir)
@@ -2251,10 +2027,10 @@ class FlexTag:
 
     def _gather_sources(
         self,
-        path: Union[str, List[str], None],
-        string: Union[str, List[str], None],
-        dir: Union[str, List[str], None],
-    ) -> List[str]:
+        path: str | list[str] | None,
+        string: str | list[str] | None,
+        dir: str | list[str] | None,
+    ) -> list[str]:
         out = []
         if path:
             if isinstance(path, str):
@@ -2274,7 +2050,7 @@ class FlexTag:
                     out.extend(self._dir_files(d))
         return out
 
-    def _dir_files(self, directory: str) -> List[str]:
+    def _dir_files(self, directory: str) -> list[str]:
         res = []
         if not os.path.isdir(directory):
             return res
@@ -2287,7 +2063,7 @@ class FlexTag:
     def _parse_source(self, src: str, source_name: str) -> Container:
         if os.path.exists(src) and os.path.isfile(src):
             logger.debug(f"Parsing file: {src}")
-            with open(src, "r", encoding="utf-8", errors="surrogateescape") as f:
+            with open(src, encoding="utf-8", errors="surrogateescape") as f:
                 lines = f.readlines()
         else:
             logger.debug("Parsing raw string input.")

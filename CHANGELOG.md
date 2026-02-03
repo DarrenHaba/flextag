@@ -2,7 +2,9 @@
 ### BREAKING CHANGES
 - Renamed `raw` content type to `text` (default type for sections without explicit type)
 - Removed encoding types: `utf-8`, `latin-1`, `ascii`, `utf-16` and their aliases
-- `to_dict()` now uses `__text` key instead of `__raw` for text sections
+- Removed `to_dict()` method and function - use `view.sections` and `section.content` instead
+- Removed `to_flexmap()` method and function
+- Removed `FlexMap` and `FlexPoint` classes
 
 ### Added
 - `binary` content type for raw byte data (returns `bytes` instead of `str`)
@@ -14,13 +16,16 @@
 ### Changed
 - Default section type is now `text` (functionally same as old `raw`)
 - Simplified content type system: just `text`, `binary`, and markup types (json, yaml, toml, ftml)
+- Simplified API: access sections via `view.sections` and content via `section.content`
 
 ### Removed
+- `to_dict()` - access parsed content directly via `section.content`
+- `to_flexmap()` - use `view.sections` and `view.filter()` instead
+- `FlexMap` and `FlexPoint` classes - use direct section access
 - Unused dependencies: duckdb, numpy, ftml, tomli-w
 - Encoding type aliases and re-encoding logic
 
 ### Fixed
-- `to_dict()` now correctly routes text/binary sections through `sec.content`
 - Made `tomli` conditional (only installed for Python < 3.11)
 
 ## [0.3.0a1] - 2025-05-20
@@ -41,7 +46,6 @@
 - Deprecated `.path` syntax (replaced with `@path`)
 - Support for boolean flag parameters without explicit values
 - Legacy help system and display formatting
-- FlexMap and FlexPoint APIs (marked as deprecated, to be removed in future)
 
 ### Changed
 - All parameter values now require explicit `key=value` format

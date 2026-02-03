@@ -1,4 +1,5 @@
 import pytest
+
 import flextag
 
 
@@ -32,10 +33,6 @@ version: null
         assert content["port"] == 8080
         assert content["version"] is None
 
-        # Test dict conversion
-        data = view.to_dict()
-        assert data["simple_config"]["name"] == "Simple Config"
-
     def test_complex_yaml_structures(self):
         """Test complex nested YAML structures."""
         test_string = """
@@ -68,8 +65,7 @@ api:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["complex_config"]
+        config = view.sections[0].content
 
         # Test nested object access
         assert config["app_name"] == "My App"
@@ -106,8 +102,7 @@ arrays_with_brackets:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["tricky_yaml"]
+        config = view.sections[0].content
 
         # Verify bracket strings are preserved as content, not parsed as sections
         assert "[[double brackets]]" in config["description"]
@@ -138,8 +133,7 @@ folded: >
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["multiline_test"]
+        config = view.sections[0].content
 
         # Test multiline string content
         assert "[[brackets]]" in config["literal"]
@@ -169,8 +163,7 @@ development:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
-        config = data["yaml_features"]
+        config = view.sections[0].content
 
         # Test anchor/alias functionality
         assert config["defaults"]["timeout"] == 30
@@ -243,13 +236,12 @@ version: 2
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
+        configs = [s for s in view.sections if s.id == "config"]
 
-        # Multiple sections with same ID should become a list
-        assert isinstance(data["config"], list)
-        assert len(data["config"]) == 2
-        assert data["config"][0]["version"] == 1
-        assert data["config"][1]["version"] == 2
+        # Multiple sections with same ID
+        assert len(configs) == 2
+        assert configs[0].content["version"] == 1
+        assert configs[1].content["version"] == 2
 
     def test_yaml_mixed_with_other_formats(self):
         """Test YAML sections alongside other format types."""
@@ -277,16 +269,15 @@ formats:
 """
 
         view = flextag.load(string=test_string)
-        data = view.to_dict()
+        configs = [s for s in view.sections if s.id == "config"]
+        summary = [s for s in view.sections if s.id == "summary"][0].content
 
         # Test mixed formats
-        configs = data["config"]
         assert len(configs) == 2
-        assert configs[0]["format"] == "yaml"
-        assert configs[1]["format"] == "json"
+        assert configs[0].content["format"] == "yaml"
+        assert configs[1].content["format"] == "json"
 
         # Test summary section
-        summary = data["summary"]
         assert summary["total_configs"] == 2
         assert "yaml" in summary["formats"]
         assert "json" in summary["formats"]
