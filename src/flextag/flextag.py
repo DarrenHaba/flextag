@@ -404,7 +404,6 @@ def _interpret_bracket_meta(
 
     section_id = ""
     tags = []
-    paths = []
     params = {}
 
     # Special handling for '[' as a separate token
@@ -414,12 +413,12 @@ def _interpret_bracket_meta(
     if tokens:
         first = tokens[0]
         if first.startswith("[#"):
-            # Extract the tag part and add it to tags
+            # Extract the tag part
             tags.append("#" + first[2:])
             tokens = tokens[1:]
         elif first.startswith("[@"):
-            # Extract the path part and add it to paths
-            paths.append("@" + first[2:])
+            # Legacy @ prefix - convert to #tag
+            tags.append("#" + first[2:])
             tokens = tokens[1:]
         elif first.startswith("[") and "=" in first:
             # Handle parameter with bracket: "[param=value"
@@ -441,15 +440,15 @@ def _interpret_bracket_meta(
         if t.startswith("#"):
             tags.append(t)
         elif t.startswith("@"):
-            paths.append(t)
+            # Legacy @ prefix - convert to #tag
+            tags.append("#" + t[1:])
         elif t.startswith("."):
-            # Deprecated path syntax
+            # Deprecated path syntax - convert to #tag
             logger.warning(
                 f"Deprecated path syntax '.{t[1:]}' used. "
-                f"Please use '@{t[1:]}' instead."
+                f"Please use '#{t[1:]}' instead."
             )
-            # Convert to new syntax internally
-            paths.append("@" + t[1:])
+            tags.append("#" + t[1:])
         elif "=" in t:
             k, v = t.split("=", 1)
             params[k.strip()] = parse_basic_value(v)
@@ -458,15 +457,14 @@ def _interpret_bracket_meta(
             params[t] = True
 
     logger.debug(f"Default tags: {tags}")
-    logger.debug(f"Default paths: {paths}")
     logger.debug(f"Default params: {params}")
-    return (section_id, tags, paths, params, is_self_closing)
+    return (section_id, tags, params, is_self_closing)
 
 
-def _parse_defaults_block(defaults_section) -> (str, list, list, dict):
+def _parse_defaults_block(defaults_section) -> (str, list, dict):
     """
     Finds the first bracket block [ ... ] in the defaults section's content
-    (which may span multiple lines). Returns (d_id, d_tags, d_paths, d_params).
+    (which may span multiple lines). Returns (d_id, d_tags, d_params).
     """
     content_lines = defaults_section.raw_content.splitlines()
     i = 0
@@ -502,16 +500,16 @@ def _parse_defaults_block(defaults_section) -> (str, list, list, dict):
 
     if not found_block or not bracket_str.strip():
         # Means no bracket block was found
-        return "", [], [], {}
+        return "", [], {}
 
     # Now parse that bracket string with your standard method:
-    d_id, tags, paths, params, _ = _interpret_bracket_meta(
+    d_id, tags, params, _ = _interpret_bracket_meta(
         bracket_str,
         line_num=i,  # Use the index we saved
         source_name=defaults_section.source_name,
         original_line=original_line,  # Use the saved original line
     )
-    return d_id, tags, paths, params
+    return d_id, tags, params
 
 
 ##############################################################################
@@ -521,7 +519,7 @@ class SchemaRule:
     """
     Stores info about one section rule:
       - section_id
-      - required tags, paths, params
+      - required tags, params
       - type_name: "text", "ftml", etc.
       - repetition: '?', '*', '+', or none
       - content_fields: an extended dict describing each field if ftml
@@ -531,14 +529,12 @@ class SchemaRule:
         self,
         section_id: str,
         tags: list[str],
-        paths: list[str],
         parameters: dict[str, Any],
         type_name: str,
         repetition_symbol: str | None = None,
     ):
         self.section_id = section_id
         self.tags = tags
-        self.paths = paths
         self.parameters = parameters
         self.type_name = type_name.lower() if type_name else "text"
         self.repetition_symbol = repetition_symbol  # '?' | '*' | '+' | None
@@ -604,7 +600,7 @@ class ExtendedSchemaParser:
                 type_decl = m.group(3)  # "ftml" or "text"
 
                 # parse bracket metadata
-                sec_id, sec_tags, sec_paths, sec_params, is_self_closing = (
+                sec_id, sec_tags, sec_params, is_self_closing = (
                     _interpret_bracket_meta(
                         bracket_str,
                         line_num=line_idx + 1,  # Adjust for 1-based line numbering
@@ -617,7 +613,6 @@ class ExtendedSchemaParser:
                 rule = SchemaRule(
                     section_id=sec_id,
                     tags=sec_tags,
-                    paths=sec_paths,
                     parameters=sec_params,
                     type_name=type_decl,
                     repetition_symbol=repetition_symbol,
@@ -872,7 +867,7 @@ class FlexParser:
                     type_decl.lower() == "container"
                 )  # Identify container sections
 
-                section_id, tags, paths, params, is_self_closing = (
+                section_id, tags, params, is_self_closing = (
                     self._interpret_open_bracket(bracket_str, source_name, i + 1)
                 )
 
@@ -908,7 +903,6 @@ class FlexParser:
                 section_data = {
                     "section_id": section_id,
                     "tags": tags,
-                    "paths": paths,
                     "params": params,
                     "open_line": open_line,
                     "close_line": close_line,
@@ -989,18 +983,18 @@ class FlexParser:
                 source_name=source_name,
             )
 
-        # IDs are no longer used - sections are identified by tags/paths/parameters
+        # IDs are no longer used - sections are identified by tags/parameters
         section_id = ""
         tags = []
-        paths = []
         params = {}
 
-        # Parse all tokens as #tag, @path, or key=value
+        # Parse all tokens as #tag or key=value (@ is legacy, converted to #)
         for t in tokens:
             if t.startswith("#"):
                 tags.append(t)
             elif t.startswith("@"):
-                paths.append(t)
+                # Legacy @ prefix - convert to #tag
+                tags.append("#" + t[1:])
             elif "=" in t:
                 k, v = t.split("=", 1)
                 k = k.strip()
@@ -1019,16 +1013,16 @@ class FlexParser:
                     val = parse_basic_value(v)
                     params[k] = val
             else:
-                # Invalid token - neither a tag, path, nor key=value parameter
+                # Invalid token - neither a tag nor key=value parameter
                 # This might be someone trying to use an ID (no longer supported)
                 raise FlexTagSyntaxError(
-                    f"Invalid token '{t}' in bracket. Use #tag for tags, @path for paths, "
+                    f"Invalid token '{t}' in bracket. Use #tag for tags "
                     f"or key=value for parameters. Section IDs are no longer supported.",
                     line_num=line_num,
                     source_name=source_name,
                 )
 
-        return section_id, tags, paths, params, is_self_closing
+        return section_id, tags, params, is_self_closing
 
     def _convert_value_by_type(self, value_str: str, type_name: str):
         """
@@ -1098,7 +1092,6 @@ class Section:
         self,
         section_id: str,
         tags: list[str],
-        paths: list[str],
         parameters: dict[str, Any],
         type_name: str,
         open_line: int,
@@ -1109,7 +1102,6 @@ class Section:
     ):
         self.raw_id = section_id
         self.raw_tags = tags[:]
-        self.raw_paths = paths[:]
         self.raw_parameters = dict(parameters)
         self.raw_type_name = (
             type_name.strip() if type_name else "text"
@@ -1123,7 +1115,6 @@ class Section:
         self.source_name = source_name
         self.inherited_id: str | None = None
         self.inherited_tags: list[str] = []
-        self.inherited_paths: list[str] = []
         self.inherited_params: dict[str, Any] = {}
         self.inherited_type: str | None = None
 
@@ -1139,15 +1130,7 @@ class Section:
     @property
     def tags(self) -> list[str]:
         out = list(self.inherited_tags)
-        for t in self.raw_tags:
-            if t not in out:
-                out.append(t)
-        return out
-
-    @property
-    def paths(self) -> list[str]:
-        out = list(self.inherited_paths)
-        for p in self.raw_paths:
+        for p in self.raw_tags:
             if p not in out:
                 out.append(p)
         return out
@@ -1291,7 +1274,6 @@ class Container:
 
         self.id: str = ""
         self.tags: list[str] = []
-        self.paths: list[str] = []
         self.parameters: dict[str, Any] = {}
 
         for sec in self.raw_sections:
@@ -1336,13 +1318,12 @@ class Container:
             if not ln:
                 continue
 
-            # Handle double-bracketed content format: [[#tag @path param="value"]]
+            # Handle double-bracketed content format: [[@path param="value"]]
             if ln.startswith("[[") and ln.endswith("]]"):
                 ln = ln[2:-2].strip()  # Remove the double brackets
-                c_id, c_tags, c_paths, c_params = self._parse_head_metadata_line(ln)
+                c_id, c_tags, c_params = self._parse_head_metadata_line(ln)
                 # Note: c_id will always be empty since IDs are removed
                 self.tags = list(set(self.tags + c_tags))
-                self.paths = list(set(self.paths + c_paths))
                 for k, v in c_params.items():
                     self.parameters[k] = v
 
@@ -1369,11 +1350,10 @@ class Container:
             if ln.startswith("[") and ln.endswith("]"):
                 ln = ln[1:-1].strip()  # Remove the square brackets
 
-            c_id, c_tags, c_paths, c_params = self._parse_head_metadata_line(ln)
+            c_id, c_tags, c_params = self._parse_head_metadata_line(ln)
             if c_id:
                 self.id = c_id
             self.tags = list(set(self.tags + c_tags))
-            self.paths = list(set(self.paths + c_paths))
             for k, v in c_params.items():
                 self.parameters[k] = v
 
@@ -1383,11 +1363,10 @@ class Container:
 
         logger.debug("Applying bracket-based default metadata.")
 
-        d_id, d_tags, d_paths, d_params = _parse_defaults_block(self.defaults)
+        d_id, d_tags, d_params = _parse_defaults_block(self.defaults)
         logger.debug(f"Default tags: {d_tags}")
-        logger.debug(f"Default paths: {d_paths}")
 
-        if not (d_id or d_tags or d_paths or d_params):
+        if not (d_id or d_tags or d_params):
             logger.debug("No bracket block found in defaults. Skipping.")
             return
 
@@ -1404,17 +1383,13 @@ class Container:
             s.inherited_tags = list(s.inherited_tags)  # Make a copy
             s.inherited_tags.extend(d_tags)  # Add all default tags
 
-            # Add default paths to inherited_paths
-            s.inherited_paths = list(s.inherited_paths)  # Make a copy
-            s.inherited_paths.extend(d_paths)  # Add all default paths
-
             # Merge params: defaults first, then existing
             merged = dict(d_params)
             merged.update(s.inherited_params)
             s.inherited_params = merged
 
             logger.debug(
-                f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}, paths={s.paths}, inherited_paths={s.inherited_paths}"
+                f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}"
             )
 
     def _parse_schema_content(self):
@@ -1479,7 +1454,7 @@ class Container:
 
     def _parse_new_schema_rules(self, lines: list[str]):
         """
-        Parse schema rules in new format: [[#tag @path]]+: type
+        Parse schema rules in new format: [[#tag]]+: type
         """
         for line in lines:
             if not line.startswith("[["):
@@ -1493,14 +1468,14 @@ class Container:
                 quantifier = match.group(2) or ""
                 type_name = match.group(3).strip()
 
-                # Parse tags and paths from bracket content
+                # Parse tags from bracket content (@ is legacy, converted to #)
                 tags = []
-                paths = []
                 for token in bracket_content.split():
                     if token.startswith("#"):
                         tags.append(token)
                     elif token.startswith("@"):
-                        paths.append(token)
+                        # Legacy @ prefix - convert to #tag
+                        tags.append("#" + token[1:])
 
                 # Map quantifier to repetition_symbol
                 # + = one or more required
@@ -1511,7 +1486,6 @@ class Container:
                 rule = SchemaRule(
                     section_id="",  # No more IDs
                     tags=tags,
-                    paths=paths,
                     parameters={},
                     type_name=type_name,
                     repetition_symbol=repetition_symbol,
@@ -1619,7 +1593,6 @@ class Container:
                         rule = SchemaRule(
                             section_id=section_id,
                             tags=[],
-                            paths=[],
                             parameters={},
                             type_name="ftml",  # Mark as FTML type
                             repetition_symbol=None,  # Required
@@ -1658,16 +1631,15 @@ class Container:
 
     def _parse_head_metadata_line(self, line: str):
         """
-        Reuse from old logic: parse line into (id, tags, paths, params).
-        Updated to handle @ prefix for paths.
+        Reuse from old logic: parse line into (id, tags, params).
+        Uses #tag syntax. Legacy @ prefix is converted to #.
         """
         tokens = shlex.split(line)
         if not tokens:
-            return "", [], [], {}
+            return "", [], {}
 
         section_id = ""
         tags = []
-        paths = []
         params = {}
 
         first = tokens[0]
@@ -1687,15 +1659,15 @@ class Container:
             if t.startswith("#"):
                 tags.append(t)
             elif t.startswith("@"):
-                paths.append(t)
+                # Legacy @ prefix - convert to #tag
+                tags.append("#" + t[1:])
             elif t.startswith("."):
-                # Deprecated path syntax
+                # Deprecated path syntax - convert to #tag
                 logger.warning(
                     f"Deprecated path syntax '.{t[1:]}' used in container metadata. "
-                    f"Please use '@{t[1:]}' instead."
+                    f"Please use '#{t[1:]}' instead."
                 )
-                # Convert to new syntax internally
-                paths.append("@" + t[1:])
+                tags.append("#" + t[1:])
             elif "=" in t:
                 k, v = t.split("=", 1)
                 k = k.strip()
@@ -1705,7 +1677,7 @@ class Container:
             else:
                 params[t] = True
 
-        return section_id, tags, paths, params
+        return section_id, tags, params
 
     def validate_schema(self):
         """
@@ -1849,32 +1821,23 @@ class Container:
 
     def _check_metadata_rule(self, rule: SchemaRule, sec: Section):
         """
-        Validate ID, tags, paths, parameters, etc. For example:
+        Validate ID, tags, parameters, etc. For example:
          - rule.tags must be present in sec.tags
-         - rule.paths must be present in sec.paths
          - rule.parameters must match
         """
         # Check required tags
         for rt in rule.tags:
             base = rt.lstrip("#")
-            if "#" + base not in sec.tags:
-                raise SchemaSectionError(
-                    f"Section '{sec.id}' missing required tag '{rt}'."
-                )
-
-        # Check required paths - handle both @ and . prefixes
-        for rp in rule.paths:
-            base = rp.lstrip("@").lstrip(".")
-            path_found = False
-            for sp in sec.paths:
-                sp_base = sp.lstrip("@").lstrip(".")
-                if sp_base == base:
-                    path_found = True
+            tag_found = False
+            for st in sec.tags:
+                st_base = st.lstrip("#")
+                if st_base == base:
+                    tag_found = True
                     break
 
-            if not path_found:
+            if not tag_found:
                 raise SchemaSectionError(
-                    f"Section '{sec.id}' missing required path '{rp}'."
+                    f"Section '{sec.id}' missing required tag '{rt}'."
                 )
 
         # Check required parameters
@@ -1992,7 +1955,6 @@ class FlexView:
                     new_c.schema = c.schema
                     new_c.id = c.id
                     new_c.tags = c.tags.copy()
-                    new_c.paths = c.paths.copy()
                     new_c.parameters = c.parameters.copy()
                     new_conts.append(new_c)
             return FlexView(new_conts)
@@ -2025,7 +1987,7 @@ class FlexView:
     def _match_container_token(self, token: str, container) -> bool:
         """
         Match a single token against container metadata.
-        Handles tags (#tag), paths (@path), parameter expressions, and ID matching.
+        Handles tags (#tag), parameter expressions, and ID matching.
         """
         neg = False
         if token.startswith("!"):
@@ -2034,25 +1996,44 @@ class FlexView:
 
         matched = False
 
-        # Handle tag match (#tag)
+        # Legacy @ prefix - convert to # for matching
+        if token.startswith("@"):
+            token = "#" + token[1:]
+
+        # Handle tag match (#tag) with optional modifiers
+        # #tag = exact match (default)
+        # #tag* = all descendants
+        # #tag+ = immediate children only
         if token.startswith("#"):
-            tag_pattern = token[1:]  # Remove '#'
+            tag_pattern = token[1:]  # Remove #
+            modifier = None
+            if tag_pattern.endswith("*"):
+                modifier = "*"
+                tag_pattern = tag_pattern[:-1]
+            elif tag_pattern.endswith("+"):
+                modifier = "+"
+                tag_pattern = tag_pattern[:-1]
+
             for tag in container.tags:
                 tag_value = tag[1:] if tag.startswith("#") else tag
-                if tag_value == tag_pattern:
-                    matched = True
-                    break
 
-        # Handle path match (@path or .path)
-        elif token.startswith("@") or token.startswith("."):
-            path_pattern = token[1:]  # Remove @ or .
-            for path in container.paths:
-                path_value = (
-                    path[1:] if path.startswith("@") or path.startswith(".") else path
-                )
-                if path_value == path_pattern:
-                    matched = True
-                    break
+                if modifier == "*":
+                    # All descendants: exact match OR starts with pattern.
+                    if tag_value == tag_pattern or tag_value.startswith(tag_pattern + "."):
+                        matched = True
+                        break
+                elif modifier == "+":
+                    # Immediate children only
+                    if tag_value.startswith(tag_pattern + "."):
+                        remainder = tag_value[len(tag_pattern) + 1:]
+                        if "." not in remainder:
+                            matched = True
+                            break
+                else:
+                    # Exact match (default)
+                    if tag_value == tag_pattern:
+                        matched = True
+                        break
 
         # Handle parameter expression (key=value, key>=value, etc.)
         elif OP_PATTERN.match(token):
@@ -2111,32 +2092,44 @@ class FlexView:
         return (not matched) if neg else matched
 
     def _match_token_core(self, token: str, sec: Section) -> bool:
-        # If token starts with '#', match tag
+        # Legacy @ prefix - convert to # for matching
+        if token.startswith("@"):
+            token = "#" + token[1:]
+
+        # Legacy . prefix - convert to # for matching
+        if token.startswith("."):
+            token = "#" + token[1:]
+
+        # If token starts with '#', match tag with optional modifiers
+        # #tag = exact match (default)
+        # #tag* = all descendants
+        # #tag+ = immediate children only
         if token.startswith("#"):
             pat = token[1:]
-            return any((t[1:] if t.startswith("#") else t) == pat for t in sec.tags)
+            modifier = None
+            if pat.endswith("*"):
+                modifier = "*"
+                pat = pat[:-1]
+            elif pat.endswith("+"):
+                modifier = "+"
+                pat = pat[:-1]
 
-        # If token starts with '@', match path
-        if token.startswith("@"):
-            pat = token[1:]
-            # Check for path matching (exact or hierarchical)
-            for p in sec.paths:
-                if p.startswith("@"):
-                    p_val = p[1:]  # Remove @ prefix
-                    # Match if path equals pattern or starts with pattern followed by .
-                    if p_val == pat or p_val.startswith(pat + "."):
+            for t in sec.tags:
+                t_val = t[1:] if t.startswith("#") else t  # Remove # prefix
+
+                if modifier == "*":
+                    # All descendants: exact match OR starts with pattern.
+                    if t_val == pat or t_val.startswith(pat + "."):
                         return True
-            return False
-
-        # If token starts with '.', match path (legacy)
-        if token.startswith("."):
-            pat = token[1:]
-            # Check for path matching (exact or hierarchical)
-            for p in sec.paths:
-                if p.startswith("@") or p.startswith("."):
-                    p_val = p[1:]  # Remove prefix
-                    # Match if path equals pattern or starts with pattern followed by .
-                    if p_val == pat or p_val.startswith(pat + "."):
+                elif modifier == "+":
+                    # Immediate children only: must start with pattern. and have no further dots
+                    if t_val.startswith(pat + "."):
+                        remainder = t_val[len(pat) + 1 :]
+                        if "." not in remainder:
+                            return True
+                else:
+                    # Exact match (default)
+                    if t_val == pat:
                         return True
             return False
 
@@ -2257,7 +2250,6 @@ class FlexTag:
             s_obj = Section(
                 section_id=rs["section_id"],
                 tags=rs["tags"],
-                paths=rs["paths"],
                 parameters=rs["params"],
                 type_name=rs["type_decl"],
                 open_line=rs["open_line"],

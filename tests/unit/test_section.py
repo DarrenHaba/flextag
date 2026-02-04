@@ -9,7 +9,6 @@ class TestSection:
         text_section = Section(
             section_id="text_sec",
             tags=[],
-            paths=[],
             parameters={},
             type_name="text",
             open_line=0,
@@ -23,7 +22,6 @@ class TestSection:
         yaml_section = Section(
             section_id="yaml_sec",
             tags=[],
-            paths=[],
             parameters={},
             type_name="yaml",
             open_line=0,
@@ -43,7 +41,6 @@ class TestSection:
         section = Section(
             section_id="",
             tags=["#local"],
-            paths=[".local"],
             parameters={"local": "value"},
             type_name="text",
             open_line=0,
@@ -55,13 +52,11 @@ class TestSection:
         # Set inherited values
         section.inherited_id = "default_id"
         section.inherited_tags = ["#default"]
-        section.inherited_paths = [".default"]
         section.inherited_params = {"default": "value"}
 
         # Check combined results
         assert section.id == "default_id"  # Uses inherited when raw is empty
         assert sorted(section.tags) == sorted(["#default", "#local"])
-        assert sorted(section.paths) == sorted([".default", ".local"])
         assert section.parameters == {"default": "value", "local": "value"}
 
     def test_type_inheritance(self):
@@ -69,7 +64,6 @@ class TestSection:
         section = Section(
             section_id="sec",
             tags=[],
-            paths=[],
             parameters={},
             type_name="text",  # Default
             open_line=0,

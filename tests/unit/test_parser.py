@@ -1,6 +1,6 @@
 import pytest
 
-from flextag.flextag import FlexParser, FlexTagSyntaxError, FlexTag
+from flextag.flextag import FlexParser, FlexTag, FlexTagSyntaxError
 
 
 class TestFlexParser:
@@ -45,8 +45,7 @@ class TestFlexParser:
 
         result = parser.parse_bracket_sections(content.splitlines(), "<string>")
         sections = result["sections"]
-        assert sections[0]["tags"] == ["#draft"]
-        assert sections[0]["paths"] == ["@path"]
+        assert sections[0]["tags"] == ["#draft", "#path"]
         assert sections[0]["params"] == {"key": "value"}
 
     def test_section_with_comment(self, parser):

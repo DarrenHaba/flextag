@@ -11,11 +11,8 @@ Markup types (json, yaml, toml, ftml) are tested elsewhere.
 import os
 import tempfile
 
-import pytest
-
 import flextag
-from flextag.flextag import Section, FlexTag
-
+from flextag.flextag import FlexTag, Section
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,7 +30,6 @@ def make_section(content_lines, type_name="text", tag="#test"):
     return Section(
         section_id="",
         tags=[tag],
-        paths=[],
         parameters={},
         type_name=type_name,
         open_line=0,
@@ -161,7 +157,7 @@ Hello binary
         section = make_section(["café"], type_name="binary")
         content = section.content
         assert isinstance(content, bytes)
-        assert content == "café".encode("utf-8")
+        assert content == "café".encode()
 
     def test_binary_roundtrip_non_utf8_bytes(self):
         """Non-UTF-8 bytes survive the round-trip through surrogateescape.

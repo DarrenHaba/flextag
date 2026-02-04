@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from flextag import FlexTag, SchemaSectionError, SchemaTypeError
+from flextag import FlexTag, SchemaSectionError
 
 try:
     import ftml
@@ -90,18 +90,18 @@ class TestFlexTagMetadata(unittest.TestCase):
         self.assertIn("#draft", section.tags)
         self.assertIn("#important", section.tags)
 
-    def test_at_prefix_paths(self):
-        """Test @ prefix for paths."""
+    def test_hierarchical_tags(self):
+        """Test hierarchical tags with dot notation."""
         data = """
-        [[#test @category.subcategory @topic]]
+        [[#test #category.subcategory #topic]]
         Content
         [[/]]
         """
         view = FlexTag.load(string=data, validate=False)
         section = view.sections[0]
         self.assertIn("#test", section.tags)
-        self.assertIn("@category.subcategory", section.paths)
-        self.assertIn("@topic", section.paths)
+        self.assertIn("#category.subcategory", section.tags)
+        self.assertIn("#topic", section.tags)
 
     def test_parameters(self):
         """Test parameter handling."""
@@ -361,7 +361,7 @@ Hello world
         view = FlexTag.load(string=data, validate=False)
         container = view.containers[0]
         self.assertIn("#plugin", container.tags)
-        self.assertIn("@plugins.chart", container.paths)
+        self.assertIn("#plugins.chart", container.tags)
         self.assertEqual(container.parameters.get("version"), 1.0)
 
     def test_meta_block_filtering(self):
