@@ -11,7 +11,7 @@
    - No ID matching needed
 
 3. **New file-level blocks** - DONE
-   - `---meta---` ... `---/meta---` for file metadata (replaces `[[]]: container`)
+   - `---meta---` ... `---/meta---` for file metadata (replaces `[[]]: file-metadata`)
    - `---schema---` ... `---/schema---` for schema rules (replaces `[[]]: schema`)
 
 4. **Remove single bracket notation** - DONE

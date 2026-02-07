@@ -294,20 +294,26 @@ Content here
         assert "#plugin" in result["meta_content"]
         assert "@plugins.chart" in result["meta_content"]
 
-    def test_schema_block_parsing(self, parser):
-        """Test parsing of ---schema--- block"""
-        content = """---schema---
-[[#notes #draft]]+: text
-[[#config]]: yaml
----/schema---
+    def test_ftml_schema_section_parsing(self, parser):
+        """Test parsing of ftml-schema sections"""
+        content = """[[#schema.product]]: ftml-schema
+name: str
+price: float
+[[/]]
 
-[[#notes #draft]]
-A draft note
+[[#schema.product name="Widget" price=9.99]]: text
+A product
 [[/]]"""
 
         result = parser.parse_bracket_sections(content.splitlines(), "<string>")
-        assert result["schema_content"] is not None
-        assert "[[#notes #draft]]+: text" in result["schema_content"]
+        sections = result["sections"]
+        assert len(sections) == 2
+        # First section is the schema
+        assert sections[0]["type_decl"] == "ftml-schema"
+        assert "#schema.product" in sections[0]["tags"]
+        # Second section is the data
+        assert sections[1]["type_decl"] == "text"
+        assert sections[1]["params"]["name"] == "Widget"
 
     def test_quoted_parameter_values(self, parser):
         """Test handling of quoted parameter values"""

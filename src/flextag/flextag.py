@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import shlex
-from collections import deque
 from typing import (
     Any,
 )
@@ -174,6 +173,51 @@ BASIC_TYPES = {"text", "binary"}
 ##############################################################################
 
 OP_PATTERN = re.compile(r"^([^=!<>]+)\s*(=|!=|>=|<=|>|<)\s*(.+)$")
+
+
+def match_tag(pattern: str, tags: list[str]) -> bool:
+    """
+    Match a single tag pattern against a list of tags.
+
+    Uses the same syntax as filter queries:
+      #tag   = exact match (default)
+      #tag*  = self + all descendants
+      #tag+  = immediate children only
+
+    This is the shared matching logic used by both schema matching
+    and filter queries.
+    """
+    # Strip # prefix from pattern
+    pat = pattern.lstrip("#")
+
+    # Detect modifier suffix
+    modifier = None
+    if pat.endswith("*"):
+        modifier = "*"
+        pat = pat[:-1]
+    elif pat.endswith("+"):
+        modifier = "+"
+        pat = pat[:-1]
+
+    for tag in tags:
+        tag_value = tag.lstrip("#")
+
+        if modifier == "*":
+            # Self + all descendants
+            if tag_value == pat or tag_value.startswith(pat + "."):
+                return True
+        elif modifier == "+":
+            # Immediate children only
+            if tag_value.startswith(pat + "."):
+                remainder = tag_value[len(pat) + 1:]
+                if "." not in remainder:
+                    return True
+        else:
+            # Exact match (default)
+            if tag_value == pat:
+                return True
+
+    return False
 
 
 def format_error_location(source_name, line_num, column_num):
@@ -437,7 +481,7 @@ def _interpret_bracket_meta(
 
     # Process the rest of the tokens
     for t in tokens:
-        if t.startswith("#"):
+        if t.startswith("#") or t.startswith("!#"):
             tags.append(t)
         elif t.startswith("@"):
             # Legacy @ prefix - convert to #tag
@@ -513,118 +557,143 @@ def _parse_defaults_block(defaults_section) -> (str, list, dict):
 
 
 ##############################################################################
-# SCHEMA RULES
+# PROPERTY SCHEMA (Tag-based schema system for header property validation)
 ##############################################################################
-class SchemaRule:
+
+
+class PropertySchema:
     """
-    Stores info about one section rule:
-      - section_id
-      - required tags, params
-      - type_name: "text", "ftml", etc.
-      - repetition: '?', '*', '+', or none
-      - content_fields: an extended dict describing each field if ftml
+    Defines validation rules for sections matching specific tags.
+
+    Schema tags use the SAME syntax as filter queries:
+      #tag   = exact match (default)
+      #tag*  = self + all descendants
+      #tag+  = immediate children only
+      !#tag  = negation (must NOT have tag)
+
+    Examples:
+        [[#adapter]]: ftml-schema            — matches only sections with exactly #adapter
+        [[#adapter*]]: ftml-schema           — matches #adapter, #adapter.live, #adapter.live.binance, etc.
+        [[#adapter+]]: ftml-schema           — matches #adapter.live, #adapter.historical (one level)
+        [[#adapter #live]]: ftml-schema      — matches sections with BOTH exact #adapter AND exact #live
+        [[#adapter !#deprecated]]: ftml-schema — matches sections with #adapter but NOT #deprecated
+
+    TWO SEPARATE VALIDATIONS occur:
+    1. Header properties are validated against the schema
+    2. If the section's content type is 'ftml', the FTML body content is ALSO
+       validated against the same schema
     """
 
     def __init__(
         self,
-        section_id: str,
         tags: list[str],
-        parameters: dict[str, Any],
-        type_name: str,
-        repetition_symbol: str | None = None,
+        property_definitions: str,
+        source_section: "Section",
     ):
-        self.section_id = section_id
-        self.tags = tags
-        self.parameters = parameters
-        self.type_name = type_name.lower() if type_name else "text"
-        self.repetition_symbol = repetition_symbol  # '?' | '*' | '+' | None
-
-        # For FTML content constraints, you can store structured fields here
-        self.ftml_fields = {}  # "field_name" -> (field_config)
+        self.tags = tags  # e.g., ["#adapter*", "#live"]
+        self.property_definitions = property_definitions  # FTML schema content
+        self.source_section = source_section
 
     def __repr__(self):
-        return (
-            f"<SchemaRule id={self.section_id!r} type={self.type_name!r} "
-            f"repetition={self.repetition_symbol!r} tags={self.tags}>"
-        )
+        return f"<PropertySchema tags={self.tags}>"
 
-
-##############################################################################
-# SCHEMA EXTENDED PARSER
-##############################################################################
-
-
-class ExtendedSchemaParser:
-    """
-    Pre-parses lines in the [schema] block, building a list of SchemaRule objects.
-    Each line might look like:
-
-      [id #tag @path key="value"]+: ftml
-        fieldA: !!str
-        fieldB?: !!int? = 10
-        ...
-
-    We'll parse it line by line, detect repetition symbols,
-    plus we can parse the nested lines if it's a 'ftml' content field definition block.
-    """
-
-    # Regex to capture something like "[id @path #tag key=val]?: typeName"
-    # group(1) => "id @path #tag key=val"
-    # group(2) => repetition symbol (?), +, or *
-    # group(3) => typeName (optional)
-    SCHEMA_LINE_RE = re.compile(r"^\s*\[([^\]]+)\](?:(\?|\+|\*)\s*)?:\s*(\S+)\s*$")
-
-    def __init__(self, source_name: str):
-        self.source_name = source_name
-
-    def parse_schema_block(self, lines: list[str]) -> list[SchemaRule]:
+    def matches_section(self, section: "Section") -> bool:
         """
-        Parse lines from the schema section,
-        building a list of SchemaRule objects, each describing
-        a single bracketed rule line.
+        Check if this schema applies to the given section.
+
+        Uses the same tag matching syntax as filter queries:
+          #tag   = exact match (default)
+          #tag*  = self + all descendants
+          #tag+  = immediate children only
+          !#tag  = negation (must NOT have tag)
+
+        ALL schema tags must match (AND logic). Each tag is matched
+        independently against the section's tags.
         """
-        rules = []
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            line_idx = i  # Save original index before incrementing
-            i += 1
-            if not line or line.startswith("#"):
-                continue
+        for schema_tag in self.tags:
+            neg = False
+            tag = schema_tag
+            if tag.startswith("!"):
+                neg = True
+                tag = tag[1:].strip()
+            matched = match_tag(tag, section.tags)
+            if neg:
+                matched = not matched
+            if not matched:
+                return False
+        return True
 
-            # we can detect bracket lines with regex
-            m = self.SCHEMA_LINE_RE.match(line)
-            if m:
-                bracket_str = m.group(1)  # e.g. "id #tag @path key=val /"
-                repetition_symbol = m.group(2)  # ? + *
-                type_decl = m.group(3)  # "ftml" or "text"
+    def validate(self, section: "Section") -> list[str]:
+        """
+        Validate section against schema definitions.
 
-                # parse bracket metadata
-                sec_id, sec_tags, sec_params, is_self_closing = (
-                    _interpret_bracket_meta(
-                        bracket_str,
-                        line_num=line_idx + 1,  # Adjust for 1-based line numbering
-                        source_name=self.source_name,  # Use the source_name from the parser
-                        original_line=line,  # Use the current line
-                    )
-                )
+        TWO SEPARATE VALIDATIONS:
+        1. Header properties - always validated against schema
+        2. FTML body content - validated if section's content type is 'ftml'
 
-                # create rule
-                rule = SchemaRule(
-                    section_id=sec_id,
-                    tags=sec_tags,
-                    parameters=sec_params,
-                    type_name=type_decl,
-                    repetition_symbol=repetition_symbol,
-                )
-                rules.append(rule)
+        Both validations use the same schema definitions but are independent.
+        The header and body can have different data - both must be valid.
 
+        Returns list of error messages (empty if valid).
+        """
+        errors = []
+
+        # Validation 1: Header properties
+        try:
+            params_ftml = self._parameters_to_ftml(section.parameters)
+            header_errors = validate_ftml(params_ftml, self.property_definitions)
+            for err in header_errors:
+                errors.append(f"Header property error: {err}")
+        except Exception as e:
+            errors.append(f"Header validation error: {str(e)}")
+
+        # Validation 2: FTML body content (only if content type is 'ftml')
+        if section.type_name.lower() == "ftml":
+            try:
+                body_content = section.raw_content
+                if body_content.strip():  # Only validate non-empty body
+                    body_errors = validate_ftml(body_content, self.property_definitions)
+                    for err in body_errors:
+                        errors.append(f"Body content error: {err}")
+            except Exception as e:
+                errors.append(f"Body validation error: {str(e)}")
+
+        return errors
+
+    def _parameters_to_ftml(self, parameters: dict[str, Any]) -> str:
+        """
+        Convert section parameters dict to FTML format for validation.
+        """
+        lines = []
+        for key, value in parameters.items():
+            if isinstance(value, str):
+                # Escape quotes in string values
+                escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+                lines.append(f'{key} = "{escaped}"')
+            elif isinstance(value, bool):
+                lines.append(f'{key} = {"true" if value else "false"}')
+            elif value is None:
+                lines.append(f"{key} = null")
+            elif isinstance(value, (int, float)):
+                lines.append(f"{key} = {value}")
+            elif isinstance(value, list):
+                # Handle lists - convert to FTML array syntax
+                items = []
+                for item in value:
+                    if isinstance(item, str):
+                        escaped = item.replace("\\", "\\\\").replace('"', '\\"')
+                        items.append(f'"{escaped}"')
+                    elif isinstance(item, bool):
+                        items.append("true" if item else "false")
+                    elif item is None:
+                        items.append("null")
+                    else:
+                        items.append(str(item))
+                lines.append(f'{key} = [{", ".join(items)}]')
             else:
-                # Possibly parse sub-fields if you want lines like "field: !!int"
-                # We skip them here. Or do an advanced approach.
-                pass
-
-        return rules
+                # Fallback for other types
+                lines.append(f"{key} = {value}")
+        return "\n".join(lines)
 
 
 ##############################################################################
@@ -785,23 +854,20 @@ class FlexParser:
         self, lines: list[str], source_name: str
     ) -> list[dict[str, Any]]:
         """
-        Enhanced version that correctly handles 'container' sections and extracts their metadata.
-        Also parses ---meta--- and ---schema--- blocks.
+        Enhanced version that correctly handles 'file-metadata' sections and extracts their metadata.
+        Also parses ---meta--- blocks.
         """
         open_pat_str = r"^\s*\[\[\s*(.*?)\]\]\s*(?::\s*(.*?))?$"
         close_pat_str = r"^\s*\[\[/\s*\]\]\s*$"  # Just [[/]] - no ID needed
         open_pat = re.compile(open_pat_str)
         close_pat = re.compile(close_pat_str)
 
-        # Patterns for ---meta--- and ---schema--- blocks
+        # Pattern for ---meta--- block
         meta_open_pat = re.compile(r"^\s*---meta---\s*$")
         meta_close_pat = re.compile(r"^\s*---/meta---\s*$")
-        schema_open_pat = re.compile(r"^\s*---schema---\s*$")
-        schema_close_pat = re.compile(r"^\s*---/schema---\s*$")
 
         sections = []
         meta_content = None
-        schema_content = None
         i = 0
         n = len(lines)
 
@@ -823,20 +889,6 @@ class FlexParser:
                     meta_content = meta_content[:-1]
                 continue
 
-            # Check for ---schema--- block
-            if schema_open_pat.match(line):
-                schema_lines = []
-                i += 1
-                while i < n:
-                    if schema_close_pat.match(lines[i].rstrip("\n")):
-                        i += 1
-                        break
-                    schema_lines.append(lines[i])
-                    i += 1
-                schema_content = "".join(schema_lines)
-                if schema_content.endswith("\n"):
-                    schema_content = schema_content[:-1]
-                continue
             if not line.strip() or line.strip().startswith("#"):
                 i += 1
                 continue
@@ -863,9 +915,9 @@ class FlexParser:
                 open_line = i
                 bracket_str = m_open.group(1) or ""
                 type_decl = m_open.group(2) or ""
-                is_container = (
-                    type_decl.lower() == "container"
-                )  # Identify container sections
+                is_file_metadata = (
+                    type_decl.lower() == "file-metadata"
+                )  # Identify file-metadata sections
 
                 section_id, tags, params, is_self_closing = (
                     self._interpret_open_bracket(bracket_str, source_name, i + 1)
@@ -911,13 +963,13 @@ class FlexParser:
                     "raw_content": raw_content,
                 }
 
-                if is_container:
-                    # If it's a container, parse its content for metadata
-                    section_data["container_metadata"] = self._parse_container_metadata(
+                if is_file_metadata:
+                    # If it's file-metadata, parse its content for metadata
+                    section_data["file_metadata"] = self._parse_file_metadata(
                         raw_content
                     )
                 else:
-                    section_data["container_metadata"] = (
+                    section_data["file_metadata"] = (
                         None  # Ensure it's always present
                     )
 
@@ -934,18 +986,16 @@ class FlexParser:
                     )
                 i += 1
 
-        # Return sections along with meta and schema content
+        # Return sections along with meta content
         return {
             "sections": sections,
             "meta_content": meta_content,
-            "schema_content": schema_content,
         }
 
-    def _parse_container_metadata(self, raw_content: str) -> dict[str, Any]:
+    def _parse_file_metadata(self, raw_content: str) -> dict[str, Any]:
         """
-        Parses the raw content of a container section to extract metadata.
-        This assumes a simple key=value format within the container.
-        You might need to adjust this based on your exact metadata format.
+        Parses the raw content of a file-metadata section to extract metadata.
+        This assumes a simple key=value format within the file-metadata section.
         """
         metadata = {}
         for line in raw_content.splitlines():
@@ -990,7 +1040,7 @@ class FlexParser:
 
         # Parse all tokens as #tag or key=value (@ is legacy, converted to #)
         for t in tokens:
-            if t.startswith("#"):
+            if t.startswith("#") or t.startswith("!#"):
                 tags.append(t)
             elif t.startswith("@"):
                 # Legacy @ prefix - convert to #tag
@@ -1169,7 +1219,7 @@ class Section:
     def _parse_content(self) -> Any:
         """
         Parse content based on type_name: 'text', 'binary', 'ftml', 'yaml', 'json', 'toml', etc.
-        'container', 'defaults', 'schema' handle separately in Container.
+        'file-metadata', 'defaults', 'schema' handle separately in Container.
         """
         raw = self.raw_content
         tname = self.type_name.lower().strip()
@@ -1199,6 +1249,13 @@ class Section:
                 raise FlexTagSyntaxError(
                     f"FTML parsing error in section '{self.id}': {e}"
                 )
+
+        elif tname == "ftml-schema":
+            # Schema sections store raw FTML schema content
+            # They are processed specially during Container initialization
+            # Return raw content - it will be used by PropertySchema for validation
+            logger.debug(f"Section ID='{self.id}' is an ftml-schema section.")
+            return raw
 
         elif tname == "yaml":
             # Parse with YAML library
@@ -1230,9 +1287,9 @@ class Section:
                     f"TOML parsing error in section '{self.id}': {e}"
                 )
 
-        # Handle container type properly
-        elif tname == "container":
-            # For container type, return lines for Container to process
+        # Handle file-metadata type properly
+        elif tname == "file-metadata":
+            # For file-metadata type, return lines for Container to process
             return raw.splitlines()
 
         # Default: treat unknown types as text with a warning
@@ -1249,7 +1306,8 @@ class Section:
 class Container:
     """
     Holds sections from a single flextag source.
-    Meta and schema are now parsed from ---meta--- and ---schema--- blocks.
+    Meta content is parsed from ---meta--- blocks.
+    Schema validation uses ftml-schema sections.
     """
 
     def __init__(
@@ -1257,20 +1315,16 @@ class Container:
         sections: list[Section],
         source_name: str,
         meta_content: str | None = None,
-        schema_content: str | None = None,
+        schema_content: str | None = None,  # Deprecated, kept for compatibility
     ):
         self.source_name = source_name
         self.raw_sections = sections[:]
         self.sections: list[Section] = []
-        self.container_metadata: Section | None = None
+        self.file_metadata: Section | None = None
         self.defaults: Section | None = None
-        self.schema: Section | None = None
-        self.schema_rules: list[SchemaRule] = []
-        self.ftml_schema: dict[str, Any] = {}  # New: holds parsed FTML schema
 
-        # New: raw content from ---meta--- and ---schema--- blocks
+        # Raw content from ---meta--- block
         self.meta_content = meta_content
-        self.schema_content = schema_content
 
         self.id: str = ""
         self.tags: list[str] = []
@@ -1278,31 +1332,25 @@ class Container:
 
         for sec in self.raw_sections:
             stype = sec.type_name.lower()
-            if stype == "container":
-                self.container_metadata = sec
+            if stype == "file-metadata":
+                self.file_metadata = sec
             elif stype == "defaults":
                 self.defaults = sec
-            elif stype == "schema":
-                self.schema = sec
             else:
                 self.sections.append(sec)
 
         # Process new ---meta--- block if present
         if self.meta_content:
             self._extract_meta_content()
-        # Fallback to old container section style
-        elif self.container_metadata:
-            self._extract_container_metadata()
+        # Fallback to old file-metadata section style
+        elif self.file_metadata:
+            self._extract_file_metadata()
 
         if self.defaults:
             self._apply_defaults()
 
-        # Process new ---schema--- block if present
-        if self.schema_content:
-            self._parse_schema_content()
-        # Fallback to old schema section style
-        elif self.schema:
-            self._parse_schema()
+        # Collect property schemas from ftml-schema sections (new system)
+        self._collect_property_schemas()
 
     def _extract_meta_content(self):
         """
@@ -1327,26 +1375,26 @@ class Container:
                 for k, v in c_params.items():
                     self.parameters[k] = v
 
-    def _extract_container_metadata(self):
+    def _extract_file_metadata(self):
         """
-        Parse lines from container_metadata as simple key=val or param tokens.
-        (Legacy support for old [[]]: container syntax)
+        Parse lines from file_metadata as simple key=val or param tokens.
+        (Supports [[]]: file-metadata syntax)
         """
-        logger.debug("Extracting container metadata.")
+        logger.debug("Extracting file metadata.")
 
         # Handle both cases: content as string or as list
-        if isinstance(self.container_metadata.content, str):
-            lines = self.container_metadata.content.splitlines()
+        if isinstance(self.file_metadata.content, str):
+            lines = self.file_metadata.content.splitlines()
         else:
             # Content is already a list of lines
-            lines = self.container_metadata.content
+            lines = self.file_metadata.content
 
         for line in lines:
             ln = line.strip()
             if not ln:
                 continue
 
-            # Handle square-bracketed content format: [container_id #tag param="value"]
+            # Handle square-bracketed content format: [#tag param="value"]
             if ln.startswith("[") and ln.endswith("]"):
                 ln = ln[1:-1].strip()  # Remove the square brackets
 
@@ -1392,243 +1440,6 @@ class Container:
                 f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}"
             )
 
-    def _parse_schema_content(self):
-        """
-        Parse content from ---schema--- block.
-        Expects double bracket format for schema rules: [[#tag]]+: type
-        """
-        logger.debug("Parsing schema content from ---schema--- block.")
-        if not self.schema_content:
-            return
-
-        # Parse schema rules from the new format
-        # Rules look like: [[#notes #draft]]+: text
-        content = self.schema_content
-
-        # Look for FTML schema blocks or traditional rules
-        ftml_schema_found = False
-        rule_blocks = []
-        current_block = []
-
-        for line in content.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-
-            # Check if line defines a schema rule with FTML
-            # New format: [[#tag]]: ftml
-            if stripped.startswith("[[") and "]]: " in stripped:
-                if "ftml" in stripped.lower():
-                    if current_block:
-                        rule_blocks.append(current_block)
-                        current_block = []
-                    current_block.append(stripped)
-                    ftml_schema_found = True
-                else:
-                    # Traditional rule like [[#notes #draft]]+: text
-                    current_block.append(stripped)
-            elif stripped.startswith("[[/]]"):
-                # End of FTML schema block
-                if current_block:
-                    rule_blocks.append(current_block)
-                    current_block = []
-            elif current_block:
-                current_block.append(stripped)
-
-        # Don't forget the last block
-        if current_block:
-            rule_blocks.append(current_block)
-
-        # Process the blocks
-        if ftml_schema_found:
-            for block in rule_blocks:
-                if any("ftml" in line.lower() for line in block if "]]: " in line):
-                    self._parse_ftml_schema_block("\n".join(block))
-                else:
-                    self._parse_new_schema_rules(block)
-        else:
-            # All traditional rules
-            self._parse_new_schema_rules(
-                [line.strip() for line in content.splitlines() if line.strip()]
-            )
-
-    def _parse_new_schema_rules(self, lines: list[str]):
-        """
-        Parse schema rules in new format: [[#tag]]+: type
-        """
-        for line in lines:
-            if not line.startswith("[["):
-                continue
-
-            # Parse rule like [[#notes #draft]]+: text
-            # or [[#config]]: yaml
-            match = re.match(r"^\[\[(.*?)\]\]([+?])?:\s*(\w+)\s*$", line)
-            if match:
-                bracket_content = match.group(1).strip()
-                quantifier = match.group(2) or ""
-                type_name = match.group(3).strip()
-
-                # Parse tags from bracket content (@ is legacy, converted to #)
-                tags = []
-                for token in bracket_content.split():
-                    if token.startswith("#"):
-                        tags.append(token)
-                    elif token.startswith("@"):
-                        # Legacy @ prefix - convert to #tag
-                        tags.append("#" + token[1:])
-
-                # Map quantifier to repetition_symbol
-                # + = one or more required
-                # ? = optional (zero or one)
-                # * = zero or more (not used yet in new syntax, but possible)
-                repetition_symbol = quantifier if quantifier else None
-
-                rule = SchemaRule(
-                    section_id="",  # No more IDs
-                    tags=tags,
-                    parameters={},
-                    type_name=type_name,
-                    repetition_symbol=repetition_symbol,
-                )
-                self.schema_rules.append(rule)
-                logger.debug(f"Parsed new schema rule: {rule}")
-
-    def _parse_schema(self):
-        """
-        Parse the schema section for schema rules.
-
-        This method supports two types of schema formats:
-        1. Original bracket-based schema (for backward compatibility)
-        2. FTML-based schema with improved validation capabilities
-        """
-        logger.debug("Parsing schema section.")
-
-        if not self.schema:
-            logger.debug("No schema section found.")
-            return
-
-        # First, check the content of the schema section for FTML schema
-        content = self.schema.raw_content
-
-        # Look for a line like [config]: ftml in the schema content
-        ftml_schema_found = False
-        rule_blocks = []
-        current_block = []
-
-        for line in content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-
-            # Check if line defines a schema rule with FTML
-            if line.startswith("[") and "]:" in line and "ftml" in line.lower():
-                # If we had content in the current block, save it
-                if current_block:
-                    rule_blocks.append(current_block)
-                    current_block = []
-
-                # Start new block with this line
-                current_block.append(line)
-                ftml_schema_found = True
-            elif current_block:
-                # Continue existing block
-                current_block.append(line)
-            else:
-                # Just add to current block
-                current_block.append(line)
-
-        # Don't forget the last block
-        if current_block:
-            rule_blocks.append(current_block)
-
-        # Process the blocks
-        if ftml_schema_found:
-            for block in rule_blocks:
-                if any("ftml" in line.lower() for line in block if "]:" in line):
-                    # Process as FTML schema
-                    self._parse_ftml_schema_block("\n".join(block))
-                else:
-                    # Process as traditional schema rule
-                    self._parse_traditional_schema_block("\n".join(block))
-        else:
-            # No FTML schema found, use the original extended schema parser
-            self._parse_extended_schema()
-
-    def _parse_ftml_schema_block(self, block_content: str):
-        """
-        Parse an FTML schema block from the schema section.
-
-        Args:
-            block_content: Content of the FTML schema block
-        """
-        logger.debug("Parsing FTML schema block.")
-
-        # Extract the section that contains FTML schema
-        schema_section = None
-        try:
-            # Look for a line like: [config]: ftml
-            match = re.search(r"\[(.*?)\]:\s*ftml", block_content)
-            if match:
-                section_id = match.group(1).strip()
-                logger.debug(f"Found FTML schema section with ID: {section_id}")
-
-                # Extract the FTML schema content
-                content_lines = block_content.splitlines()
-                for i, line in enumerate(content_lines):
-                    if match.group(0) in line:
-                        # Skip this line and extract the content until we find a [/
-                        ftml_lines = []
-                        j = i + 1
-                        while j < len(content_lines) and not content_lines[
-                            j
-                        ].strip().startswith("[/"):
-                            ftml_lines.append(content_lines[j])
-                            j += 1
-                        ftml_content = "\n".join(ftml_lines)
-
-                        # Store the schema content
-                        self.ftml_schema[section_id] = ftml_content
-
-                        # Create a placeholder schema rule to track this section
-                        rule = SchemaRule(
-                            section_id=section_id,
-                            tags=[],
-                            parameters={},
-                            type_name="ftml",  # Mark as FTML type
-                            repetition_symbol=None,  # Required
-                        )
-                        self.schema_rules.append(rule)
-
-                        break
-        except Exception as e:
-            logger.error(f"Error parsing FTML schema block: {str(e)}")
-            # Continue with other schema processing
-
-    def _parse_traditional_schema_block(self, block_content: str):
-        """
-        Parse a traditional schema rule block.
-
-        Args:
-            block_content: Content of the traditional schema block
-        """
-        logger.debug("Parsing traditional schema block.")
-        try:
-            lines = block_content.splitlines()
-            parser = ExtendedSchemaParser(self.source_name)
-            rules = parser.parse_schema_block(lines)
-            self.schema_rules.extend(rules)
-        except Exception as e:
-            logger.error(f"Error parsing traditional schema block: {str(e)}")
-
-    def _parse_extended_schema(self):
-        """
-        Original method to parse extended schema block.
-        """
-        logger.debug("Parsing extended schema block.")
-        lines = self.schema.raw_content.splitlines()
-        parser = ExtendedSchemaParser(self.source_name)
-        self.schema_rules = parser.parse_schema_block(lines)
-
     def _parse_head_metadata_line(self, line: str):
         """
         Reuse from old logic: parse line into (id, tags, params).
@@ -1664,7 +1475,7 @@ class Container:
             elif t.startswith("."):
                 # Deprecated path syntax - convert to #tag
                 logger.warning(
-                    f"Deprecated path syntax '.{t[1:]}' used in container metadata. "
+                    f"Deprecated path syntax '.{t[1:]}' used in file metadata. "
                     f"Please use '#{t[1:]}' instead."
                 )
                 tags.append("#" + t[1:])
@@ -1681,176 +1492,82 @@ class Container:
 
     def validate_schema(self):
         """
-        Apply schema rules to self.sections.
+        Validate header properties of sections against matching property schemas.
 
-        This method handles both traditional schema rules and FTML schema validation.
+        Schema matching is tag-based:
+        - A schema applies to a section if the section's tags CONTAIN all of the schema's tags
+        - Multiple schemas can match one section (all are applied)
+        - Nested tag inheritance: #schema.product.laptop matches #schema.product schema
         """
-        if not self.schema:
-            logger.debug("No schema present. Skipping validation.")
+        if hasattr(self, "property_schemas") and self.property_schemas:
+            logger.debug(
+                f"Validating with {len(self.property_schemas)} property schemas."
+            )
+            self._validate_property_schemas()
+        else:
+            logger.debug("No property schemas present. Skipping validation.")
+
+    # =========================================================================
+    # NEW PROPERTY SCHEMA SYSTEM (tag-based, header property validation)
+    # =========================================================================
+
+    def _collect_property_schemas(self):
+        """
+        Collect all PropertySchema definitions from ftml-schema sections.
+
+        Schema tags use the same syntax as filter queries:
+          [[#adapter]]: ftml-schema    — exact match only
+          [[#adapter*]]: ftml-schema   — self + all descendants
+          [[#adapter+]]: ftml-schema   — immediate children only
+        """
+        self.property_schemas: list[PropertySchema] = []
+
+        # Find all ftml-schema sections
+        for section in self.raw_sections:
+            if section.type_name.lower() == "ftml-schema":
+                schema = PropertySchema(
+                    tags=section.tags,
+                    property_definitions=section.raw_content,
+                    source_section=section,
+                )
+                self.property_schemas.append(schema)
+                logger.debug(f"Collected property schema: {schema}")
+
+    def _find_matching_schemas(self, section: Section) -> list[PropertySchema]:
+        """
+        Find all property schemas that apply to the given section.
+        Returns list of matching schemas (can be multiple).
+        """
+        if not hasattr(self, "property_schemas"):
+            return []
+        return [s for s in self.property_schemas if s.matches_section(section)]
+
+    def _validate_property_schemas(self):
+        """
+        Validate sections against matching property schemas.
+
+        Schema tags use the same syntax as filter queries (#tag, #tag*, #tag+).
+        Multiple schemas can match one section — all are applied.
+        """
+        if not hasattr(self, "property_schemas") or not self.property_schemas:
+            logger.debug("No property schemas present. Skipping validation.")
             return
 
-        # Process traditional schema rules first
-        if self.schema_rules:
-            logger.debug(
-                f"Validating with {len(self.schema_rules)} traditional schema rules."
-            )
-            self._validate_traditional_schema()
-
-        # Process FTML schema validation
-        if self.ftml_schema:
-            logger.debug(f"Validating with {len(self.ftml_schema)} FTML schemas.")
-            self._validate_ftml_schema()
-
-    def _validate_traditional_schema(self):
-        """
-        Apply traditional schema rules to self.sections in a strict order approach.
-        """
-        rule_queue = deque(self.schema_rules)
-        sec_idx = 0
-        n_secs = len(self.sections)
-
-        while rule_queue:
-            rule = rule_queue[0]
-            needed = rule.repetition_symbol is None  # None => exactly one required
-            optional = rule.repetition_symbol == "?"
-            zero_plus = rule.repetition_symbol == "*"
-            one_plus = rule.repetition_symbol == "+"
-
-            if sec_idx >= n_secs:
-                # no more actual sections
-                if needed or one_plus:
-                    raise SchemaSectionError(
-                        f"Missing required section for schema rule '{rule.section_id}'."
-                    )
-                # else skip
-                rule_queue.popleft()
+        for section in self.sections:
+            # Skip schema sections themselves
+            if section.type_name.lower() == "ftml-schema":
                 continue
 
-            # Check if the next actual section matches
-            current_sec = self.sections[sec_idx]
-            if current_sec.id.lower() == rule.section_id.lower():
-                # check tags, paths, params
-                self._check_metadata_rule(rule, current_sec)
-                # check content type
-                if (
-                    rule.type_name != current_sec.type_name.lower()
-                    and rule.type_name not in ("*", "any")
-                ):
-                    raise SchemaTypeError(
-                        f"Section '{current_sec.id}' has type '{current_sec.type_name}', "
-                        f"but schema expects '{rule.type_name}'."
-                    )
-
-                # matched one occurrence
-                sec_idx += 1
-                if needed:
-                    # exactly once => remove rule
-                    rule_queue.popleft()
-                elif optional:
-                    # 0 or 1 => remove rule
-                    rule_queue.popleft()
-                elif one_plus:
-                    # we matched one, so switch rule to '*'
-                    # meaning any subsequent match is optional
-                    rule_queue[0].repetition_symbol = "*"
-                elif zero_plus:
-                    # we can keep the same rule in queue if we want more
-                    pass
-            else:
-                # next section doesn't match rule.section_id
-                if optional or zero_plus:
-                    # skip the rule
-                    rule_queue.popleft()
-                else:
-                    # needed or one_plus => missing
-                    raise SchemaSectionError(
-                        f"Missing required section for schema rule '{rule.section_id}' "
-                        f"but found '{current_sec.id}'."
-                    )
-
-        # if leftover actual sections appear => unexpected
-        if sec_idx < n_secs:
-            leftover_id = self.sections[sec_idx].id
-            raise SchemaSectionError(
-                f"Unexpected section '{leftover_id}' with no corresponding schema rule."
-            )
-
-    def _validate_ftml_schema(self):
-        """
-        Validate content of FTML sections against their respective schemas.
-        """
-        for schema_id, schema_content in self.ftml_schema.items():
-            # Find matching sections
-            matching_sections = [
-                s for s in self.sections if s.id.lower() == schema_id.lower()
-            ]
-
-            if not matching_sections:
-                logger.debug(f"No sections found matching schema ID: {schema_id}")
-                continue
-
-            # Validate each matching section
-            for section in matching_sections:
-                if section.type_name.lower() != "ftml":
-                    logger.warning(
-                        f"Section '{section.id}' has type '{section.type_name}' but schema expects 'ftml'. "
-                        f"Skipping validation."
-                    )
-                    continue
-
-                # Validate the raw content against the schema
-                try:
-                    # Pass the raw FTML content (not parsed data) to validation
-                    errors = validate_ftml(section.raw_content, schema_content)
-
-                    if errors:
-                        error_msg = "\n".join(errors)
-                        raise SchemaValidationError(
-                            f"FTML validation errors for section '{section.id}':\n{error_msg}"
-                        )
-
-                    logger.debug(
-                        f"FTML validation successful for section '{section.id}'"
-                    )
-                except Exception as e:
-                    if isinstance(e, SchemaValidationError):
-                        raise
+            matching_schemas = self._find_matching_schemas(section)
+            for schema in matching_schemas:
+                errors = schema.validate(section)
+                if errors:
+                    error_msg = "\n".join(errors)
                     raise SchemaValidationError(
-                        f"FTML validation error for section '{section.id}': {str(e)}"
+                        f"Schema validation errors for section at line {section.open_line}:\n{error_msg}",
+                        source_file=self.source_name,
+                        line_num=section.open_line,
                     )
-
-    def _check_metadata_rule(self, rule: SchemaRule, sec: Section):
-        """
-        Validate ID, tags, parameters, etc. For example:
-         - rule.tags must be present in sec.tags
-         - rule.parameters must match
-        """
-        # Check required tags
-        for rt in rule.tags:
-            base = rt.lstrip("#")
-            tag_found = False
-            for st in sec.tags:
-                st_base = st.lstrip("#")
-                if st_base == base:
-                    tag_found = True
-                    break
-
-            if not tag_found:
-                raise SchemaSectionError(
-                    f"Section '{sec.id}' missing required tag '{rt}'."
-                )
-
-        # Check required parameters
-        for k, v in rule.parameters.items():
-            if k not in sec.parameters:
-                raise SchemaSectionError(
-                    f"Section '{sec.id}' missing required param '{k}'."
-                )
-            if sec.parameters[k] != v:
-                # or we can do type check
-                raise SchemaSectionError(
-                    f"Section '{sec.id}' param '{k}' != expected value '{v}'."
-                )
 
 
 ##############################################################################
@@ -1949,13 +1666,15 @@ class FlexView:
                 sub_secs = [sec for sec in c.sections if sec in matched_secs]
                 if sub_secs:
                     new_c = Container(sub_secs, c.source_name)
-                    # preserve container's special sections
-                    new_c.container_metadata = c.container_metadata
+                    # preserve file metadata and special sections
+                    new_c.file_metadata = c.file_metadata
                     new_c.defaults = c.defaults
-                    new_c.schema = c.schema
                     new_c.id = c.id
                     new_c.tags = c.tags.copy()
                     new_c.parameters = c.parameters.copy()
+                    # preserve property schemas
+                    if hasattr(c, "property_schemas"):
+                        new_c.property_schemas = c.property_schemas
                     new_conts.append(new_c)
             return FlexView(new_conts)
 
@@ -2000,40 +1719,9 @@ class FlexView:
         if token.startswith("@"):
             token = "#" + token[1:]
 
-        # Handle tag match (#tag) with optional modifiers
-        # #tag = exact match (default)
-        # #tag* = all descendants
-        # #tag+ = immediate children only
+        # Handle tag match using shared match_tag logic
         if token.startswith("#"):
-            tag_pattern = token[1:]  # Remove #
-            modifier = None
-            if tag_pattern.endswith("*"):
-                modifier = "*"
-                tag_pattern = tag_pattern[:-1]
-            elif tag_pattern.endswith("+"):
-                modifier = "+"
-                tag_pattern = tag_pattern[:-1]
-
-            for tag in container.tags:
-                tag_value = tag[1:] if tag.startswith("#") else tag
-
-                if modifier == "*":
-                    # All descendants: exact match OR starts with pattern.
-                    if tag_value == tag_pattern or tag_value.startswith(tag_pattern + "."):
-                        matched = True
-                        break
-                elif modifier == "+":
-                    # Immediate children only
-                    if tag_value.startswith(tag_pattern + "."):
-                        remainder = tag_value[len(tag_pattern) + 1:]
-                        if "." not in remainder:
-                            matched = True
-                            break
-                else:
-                    # Exact match (default)
-                    if tag_value == tag_pattern:
-                        matched = True
-                        break
+            matched = match_tag(token, container.tags)
 
         # Handle parameter expression (key=value, key>=value, etc.)
         elif OP_PATTERN.match(token):
@@ -2100,38 +1788,9 @@ class FlexView:
         if token.startswith("."):
             token = "#" + token[1:]
 
-        # If token starts with '#', match tag with optional modifiers
-        # #tag = exact match (default)
-        # #tag* = all descendants
-        # #tag+ = immediate children only
+        # Handle tag match using shared match_tag logic
         if token.startswith("#"):
-            pat = token[1:]
-            modifier = None
-            if pat.endswith("*"):
-                modifier = "*"
-                pat = pat[:-1]
-            elif pat.endswith("+"):
-                modifier = "+"
-                pat = pat[:-1]
-
-            for t in sec.tags:
-                t_val = t[1:] if t.startswith("#") else t  # Remove # prefix
-
-                if modifier == "*":
-                    # All descendants: exact match OR starts with pattern.
-                    if t_val == pat or t_val.startswith(pat + "."):
-                        return True
-                elif modifier == "+":
-                    # Immediate children only: must start with pattern. and have no further dots
-                    if t_val.startswith(pat + "."):
-                        remainder = t_val[len(pat) + 1 :]
-                        if "." not in remainder:
-                            return True
-                else:
-                    # Exact match (default)
-                    if t_val == pat:
-                        return True
-            return False
+            return match_tag(token, sec.tags)
 
         # If param expression
         m = OP_PATTERN.match(token)
@@ -2242,8 +1901,7 @@ class FlexTag:
 
         parse_result = self._parser.parse_bracket_sections(lines, source_name)
         raw_secs = parse_result["sections"]
-        meta_content = parse_result["meta_content"]
-        schema_content = parse_result["schema_content"]
+        meta_content = parse_result.get("meta_content")
 
         sections = []
         for rs in raw_secs:
@@ -2260,9 +1918,7 @@ class FlexTag:
             )
             sections.append(s_obj)
 
-        container = Container(
-            sections, source_name, meta_content=meta_content, schema_content=schema_content
-        )
+        container = Container(sections, source_name, meta_content=meta_content)
         return container
 
 

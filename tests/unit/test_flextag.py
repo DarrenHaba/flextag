@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from flextag import FlexTag, SchemaSectionError
+from flextag import FlexTag
 
 try:
     import ftml
@@ -120,38 +120,125 @@ class TestFlexTagMetadata(unittest.TestCase):
 
 
 class TestFlexTagSchema(unittest.TestCase):
-    """Tests for schema validation using new ---schema--- syntax."""
+    """Tests for schema validation using ftml-schema sections."""
 
-    def test_new_schema_validation_success(self):
-        """Test new schema validation (success case)."""
+    def test_basic_schema_validation_success(self):
+        """Test basic schema validation with matching properties."""
         data = """
----schema---
-[[#notes #draft]]+: text
----/schema---
+[[#schema.product]]: ftml-schema
+name: str
+price: float
+[[/]]
 
-[[#notes #draft]]
-This is a draft note
+[[#schema.product name="Widget" price=9.99]]: text
+Product description here
 [[/]]
         """
         view = FlexTag.load(string=data, validate=True)
-        self.assertEqual(len(view.sections), 1)
-        self.assertIn("#notes", view.sections[0].tags)
-        self.assertIn("#draft", view.sections[0].tags)
+        # Schema section + data section, but only data section in .sections
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 1)
+        self.assertEqual(data_sections[0].parameters["name"], "Widget")
+        self.assertEqual(data_sections[0].parameters["price"], 9.99)
 
-    @unittest.skip("Schema validation needs update to match by tags instead of IDs")
-    def test_new_schema_validation_failure(self):
-        """Test new schema validation (failure case)."""
+    def test_descendant_match_with_star(self):
+        """Test that #tag* in schema matches descendant tags."""
         data = """
----schema---
-[[#notes #draft]]+: text
----/schema---
+[[#schema.product*]]: ftml-schema
+name: str
+[[/]]
 
-[[#notes]]
-This note is missing the required #draft tag
+[[#schema.product.laptop name="ThinkPad"]]: text
+Laptop matches because schema uses * for descendants
 [[/]]
         """
-        with self.assertRaises(SchemaSectionError):
-            FlexTag.load(string=data, validate=True)
+        view = FlexTag.load(string=data, validate=True)
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 1)
+        self.assertIn("#schema.product.laptop", data_sections[0].tags)
+
+    def test_exact_match_does_not_match_descendants(self):
+        """Test that #tag (no modifier) does NOT match descendant tags."""
+        data = """
+[[#schema.product]]: ftml-schema
+name: str
+[[/]]
+
+[[#schema.product.laptop name="ThinkPad"]]: text
+Should NOT be validated — schema is exact match only
+[[/]]
+
+[[#schema.product.laptop]]: text
+Missing name — but no schema applies so this is fine
+[[/]]
+        """
+        # Should not raise — the schema only matches exact #schema.product,
+        # not #schema.product.laptop
+        view = FlexTag.load(string=data, validate=True)
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 2)
+
+    def test_immediate_children_with_plus(self):
+        """Test that #tag+ matches immediate children only."""
+        data = """
+[[#adapter+]]: ftml-schema
+name: str
+[[/]]
+
+[[#adapter.live name="Binance"]]: text
+One level deep — matches
+[[/]]
+
+[[#adapter.live.binance name="Deep"]]: text
+Two levels deep — should NOT match the + schema
+[[/]]
+
+[[#adapter.live.binance]]: text
+Two levels deep, no name — fine because schema doesn't apply
+[[/]]
+        """
+        view = FlexTag.load(string=data, validate=True)
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 3)
+
+    def test_negation_with_bang(self):
+        """Test that !#tag excludes sections with that tag from schema matching."""
+        data = """
+[[#adapter !#deprecated]]: ftml-schema
+name: str
+[[/]]
+
+[[#adapter name="Active Adapter"]]: text
+Has #adapter, no #deprecated — schema applies, valid
+[[/]]
+
+[[#adapter #deprecated name="Old Adapter"]]: text
+Has #adapter AND #deprecated — schema does NOT apply
+[[/]]
+
+[[#adapter #deprecated]]: text
+Has #adapter AND #deprecated — no schema, missing name is fine
+[[/]]
+        """
+        view = FlexTag.load(string=data, validate=True)
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 3)
+
+    def test_unmatched_sections_allowed(self):
+        """Test that sections without matching schemas are allowed."""
+        data = """
+[[#schema.product]]: ftml-schema
+name: str
+[[/]]
+
+[[#other anything="allowed"]]: text
+No schema matches this
+[[/]]
+        """
+        view = FlexTag.load(string=data, validate=True)
+        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
+        self.assertEqual(len(data_sections), 1)
+        self.assertEqual(data_sections[0].parameters["anything"], "allowed")
 
 
 class TestFlexTagFile(unittest.TestCase):
