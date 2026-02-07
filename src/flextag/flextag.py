@@ -855,39 +855,18 @@ class FlexParser:
     ) -> list[dict[str, Any]]:
         """
         Enhanced version that correctly handles 'file-metadata' sections and extracts their metadata.
-        Also parses ---meta--- blocks.
         """
         open_pat_str = r"^\s*\[\[\s*(.*?)\]\]\s*(?::\s*(.*?))?$"
         close_pat_str = r"^\s*\[\[/\s*\]\]\s*$"  # Just [[/]] - no ID needed
         open_pat = re.compile(open_pat_str)
         close_pat = re.compile(close_pat_str)
 
-        # Pattern for ---meta--- block
-        meta_open_pat = re.compile(r"^\s*---meta---\s*$")
-        meta_close_pat = re.compile(r"^\s*---/meta---\s*$")
-
         sections = []
-        meta_content = None
         i = 0
         n = len(lines)
 
         while i < n:
             line = lines[i].rstrip("\n")
-
-            # Check for ---meta--- block
-            if meta_open_pat.match(line):
-                meta_lines = []
-                i += 1
-                while i < n:
-                    if meta_close_pat.match(lines[i].rstrip("\n")):
-                        i += 1
-                        break
-                    meta_lines.append(lines[i])
-                    i += 1
-                meta_content = "".join(meta_lines)
-                if meta_content.endswith("\n"):
-                    meta_content = meta_content[:-1]
-                continue
 
             if not line.strip() or line.strip().startswith("#"):
                 i += 1
@@ -915,10 +894,6 @@ class FlexParser:
                 open_line = i
                 bracket_str = m_open.group(1) or ""
                 type_decl = m_open.group(2) or ""
-                is_file_metadata = (
-                    type_decl.lower() == "file-metadata"
-                )  # Identify file-metadata sections
-
                 section_id, tags, params, is_self_closing = (
                     self._interpret_open_bracket(bracket_str, source_name, i + 1)
                 )
@@ -963,16 +938,6 @@ class FlexParser:
                     "raw_content": raw_content,
                 }
 
-                if is_file_metadata:
-                    # If it's file-metadata, parse its content for metadata
-                    section_data["file_metadata"] = self._parse_file_metadata(
-                        raw_content
-                    )
-                else:
-                    section_data["file_metadata"] = (
-                        None  # Ensure it's always present
-                    )
-
                 sections.append(section_data)
             else:
                 # Check if this is a non-empty line that's not a comment
@@ -986,26 +951,9 @@ class FlexParser:
                     )
                 i += 1
 
-        # Return sections along with meta content
         return {
             "sections": sections,
-            "meta_content": meta_content,
         }
-
-    def _parse_file_metadata(self, raw_content: str) -> dict[str, Any]:
-        """
-        Parses the raw content of a file-metadata section to extract metadata.
-        This assumes a simple key=value format within the file-metadata section.
-        """
-        metadata = {}
-        for line in raw_content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if "=" in line:
-                key, value = line.split("=", 1)
-                metadata[key.strip()] = parse_basic_value(value.strip())
-        return metadata
 
     def _interpret_open_bracket(
         self, bracket_str: str, source_name: str, line_num: int
@@ -1287,10 +1235,9 @@ class Section:
                     f"TOML parsing error in section '{self.id}': {e}"
                 )
 
-        # Handle file-metadata type properly
+        # file-metadata sections use header tags/params only, no body parsing needed
         elif tname == "file-metadata":
-            # For file-metadata type, return lines for Container to process
-            return raw.splitlines()
+            return raw
 
         # Default: treat unknown types as text with a warning
         else:
@@ -1306,7 +1253,7 @@ class Section:
 class Container:
     """
     Holds sections from a single flextag source.
-    Meta content is parsed from ---meta--- blocks.
+    File-level metadata comes from file-metadata sections.
     Schema validation uses ftml-schema sections.
     """
 
@@ -1314,17 +1261,12 @@ class Container:
         self,
         sections: list[Section],
         source_name: str,
-        meta_content: str | None = None,
-        schema_content: str | None = None,  # Deprecated, kept for compatibility
     ):
         self.source_name = source_name
         self.raw_sections = sections[:]
         self.sections: list[Section] = []
         self.file_metadata: Section | None = None
         self.defaults: Section | None = None
-
-        # Raw content from ---meta--- block
-        self.meta_content = meta_content
 
         self.id: str = ""
         self.tags: list[str] = []
@@ -1339,71 +1281,16 @@ class Container:
             else:
                 self.sections.append(sec)
 
-        # Process new ---meta--- block if present
-        if self.meta_content:
-            self._extract_meta_content()
-        # Fallback to old file-metadata section style
-        elif self.file_metadata:
-            self._extract_file_metadata()
+        # Promote file-metadata header tags/params to the Container level
+        if self.file_metadata:
+            self.tags = list(self.file_metadata.tags)
+            self.parameters = dict(self.file_metadata.parameters)
 
         if self.defaults:
             self._apply_defaults()
 
-        # Collect property schemas from ftml-schema sections (new system)
+        # Collect property schemas from ftml-schema sections
         self._collect_property_schemas()
-
-    def _extract_meta_content(self):
-        """
-        Parse content from ---meta--- block.
-        Expects double bracket format: [[#tag @path param="value"]]
-        """
-        logger.debug("Extracting meta content from ---meta--- block.")
-        if not self.meta_content:
-            return
-
-        for line in self.meta_content.splitlines():
-            ln = line.strip()
-            if not ln:
-                continue
-
-            # Handle double-bracketed content format: [[@path param="value"]]
-            if ln.startswith("[[") and ln.endswith("]]"):
-                ln = ln[2:-2].strip()  # Remove the double brackets
-                c_id, c_tags, c_params = self._parse_head_metadata_line(ln)
-                # Note: c_id will always be empty since IDs are removed
-                self.tags = list(set(self.tags + c_tags))
-                for k, v in c_params.items():
-                    self.parameters[k] = v
-
-    def _extract_file_metadata(self):
-        """
-        Parse lines from file_metadata as simple key=val or param tokens.
-        (Supports [[]]: file-metadata syntax)
-        """
-        logger.debug("Extracting file metadata.")
-
-        # Handle both cases: content as string or as list
-        if isinstance(self.file_metadata.content, str):
-            lines = self.file_metadata.content.splitlines()
-        else:
-            # Content is already a list of lines
-            lines = self.file_metadata.content
-
-        for line in lines:
-            ln = line.strip()
-            if not ln:
-                continue
-
-            # Handle square-bracketed content format: [#tag param="value"]
-            if ln.startswith("[") and ln.endswith("]"):
-                ln = ln[1:-1].strip()  # Remove the square brackets
-
-            c_id, c_tags, c_params = self._parse_head_metadata_line(ln)
-            if c_id:
-                self.id = c_id
-            self.tags = list(set(self.tags + c_tags))
-            for k, v in c_params.items():
-                self.parameters[k] = v
 
     def _apply_defaults(self):
         if not self.defaults:
@@ -1439,56 +1326,6 @@ class Container:
             logger.debug(
                 f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}"
             )
-
-    def _parse_head_metadata_line(self, line: str):
-        """
-        Reuse from old logic: parse line into (id, tags, params).
-        Uses #tag syntax. Legacy @ prefix is converted to #.
-        """
-        tokens = shlex.split(line)
-        if not tokens:
-            return "", [], {}
-
-        section_id = ""
-        tags = []
-        params = {}
-
-        first = tokens[0]
-        idx = 0
-        if (
-            not first.startswith("#")
-            and not first.startswith("@")
-            and not first.startswith(".")
-            and "=" not in first
-        ):
-            section_id = first
-            idx = 1
-
-        while idx < len(tokens):
-            t = tokens[idx]
-            idx += 1
-            if t.startswith("#"):
-                tags.append(t)
-            elif t.startswith("@"):
-                # Legacy @ prefix - convert to #tag
-                tags.append("#" + t[1:])
-            elif t.startswith("."):
-                # Deprecated path syntax - convert to #tag
-                logger.warning(
-                    f"Deprecated path syntax '.{t[1:]}' used in file metadata. "
-                    f"Please use '#{t[1:]}' instead."
-                )
-                tags.append("#" + t[1:])
-            elif "=" in t:
-                k, v = t.split("=", 1)
-                k = k.strip()
-                v = v.strip()
-                val = parse_basic_value(v)
-                params[k] = val
-            else:
-                params[t] = True
-
-        return section_id, tags, params
 
     def validate_schema(self):
         """
@@ -1901,7 +1738,6 @@ class FlexTag:
 
         parse_result = self._parser.parse_bracket_sections(lines, source_name)
         raw_secs = parse_result["sections"]
-        meta_content = parse_result.get("meta_content")
 
         sections = []
         for rs in raw_secs:
@@ -1918,16 +1754,15 @@ class FlexTag:
             )
             sections.append(s_obj)
 
-        container = Container(sections, source_name, meta_content=meta_content)
+        container = Container(sections, source_name)
         return container
 
 
 if __name__ == "__main__":
     # Simple usage example with new syntax
     example = r"""
----meta---
-[[#file_tag @meta debug=true]]
----/meta---
+[[#file_tag debug=true]]: file-metadata
+[[/]]
 
 [[#text]]
 text
@@ -1949,7 +1784,7 @@ text
 ]
 [[/]]
 
-[[#notes #draft @research]]
+[[#notes #draft #research]]
 This is a text block by default
 [[/]]
 

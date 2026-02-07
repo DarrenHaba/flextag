@@ -9,10 +9,9 @@ class TestDefaults:
         return FlexTag()
 
     def test_default_metadata_inheritance(self, parser):
-        """Test defaults metadata inheritance using ---meta--- block"""
-        data = """---meta---
-[[#default param="default_value"]]
----/meta---
+        """Test file-metadata tags are promoted to container level"""
+        data = """[[#default param="default_value"]]: file-metadata
+[[/]]
 
 [[#section]]
 content
@@ -21,16 +20,15 @@ content
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 
-        # Section should inherit default tags from meta
+        # Container should have tags from file-metadata
         assert "#default" in container.tags
         assert "#section" in section.tags
         assert container.parameters["param"] == "default_value"
 
     def test_default_override(self, parser):
-        """Test section overriding default metadata"""
-        data = """---meta---
-[[#default param="default_value" shared="keep"]]
----/meta---
+        """Test section params are independent from file-metadata params"""
+        data = """[[#default param="default_value" shared="keep"]]: file-metadata
+[[/]]
 
 [[#section param="override_value"]]
 content
@@ -39,22 +37,21 @@ content
         container = parser._parse_source(data, "<string>")
         section = container.sections[0]
 
-        # Container has defaults, section has its own
+        # Container has file-metadata tags/params
         assert "#default" in container.tags
         assert "#section" in section.tags
 
-        # Container should have default params
+        # Container should have file-metadata params
         assert container.parameters["param"] == "default_value"
         assert container.parameters["shared"] == "keep"
 
-        # Section should have its own override
+        # Section should have its own params
         assert section.parameters["param"] == "override_value"
 
     def test_multiple_tags_in_meta(self, parser):
-        """Test multiple tags in meta block"""
-        data = """---meta---
-[[#tag1 #tag2 param1="value1" param2="value2"]]
----/meta---
+        """Test multiple tags in file-metadata section"""
+        data = """[[#tag1 #tag2 param1="value1" param2="value2"]]: file-metadata
+[[/]]
 
 [[#section]]
 content

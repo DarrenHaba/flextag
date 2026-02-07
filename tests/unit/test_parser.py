@@ -279,20 +279,21 @@ key: value
         assert sections[0]["type_decl"] == "text"
         assert "key: value" in sections[0]["raw_content"]
 
-    def test_meta_block_parsing(self, parser):
-        """Test parsing of ---meta--- block"""
-        content = """---meta---
-[[#plugin @plugins.chart version=1.0]]
----/meta---
+    def test_file_metadata_section_parsing(self, parser):
+        """Test parsing of file-metadata section"""
+        content = """[[#plugin #plugins.chart version=1.0]]: file-metadata
+[[/]]
 
 [[#content]]
 Content here
 [[/]]"""
 
         result = parser.parse_bracket_sections(content.splitlines(), "<string>")
-        assert result["meta_content"] is not None
-        assert "#plugin" in result["meta_content"]
-        assert "@plugins.chart" in result["meta_content"]
+        sections = result["sections"]
+        assert len(sections) == 2
+        assert sections[0]["type_decl"] == "file-metadata"
+        assert "#plugin" in sections[0]["tags"]
+        assert "#plugins.chart" in sections[0]["tags"]
 
     def test_ftml_schema_section_parsing(self, parser):
         """Test parsing of ftml-schema sections"""

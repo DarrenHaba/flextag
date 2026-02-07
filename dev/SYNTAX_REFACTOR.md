@@ -10,13 +10,13 @@
    - All sections close with `[[/]]`
    - No ID matching needed
 
-3. **New file-level blocks** - DONE
-   - `---meta---` ... `---/meta---` for file metadata (replaces `[[]]: file-metadata`)
-   - `---schema---` ... `---/schema---` for schema rules (replaces `[[]]: schema`)
+3. **File-level metadata** - DONE
+   - `[[]]: file-metadata` for file metadata (renamed from `[[]]: container`)
+   - `---meta---` / `---schema---` block syntax removed — use standard sections instead
+   - Schema uses `ftml-schema` section type: `[[#tag]]: ftml-schema`
 
 4. **Remove single bracket notation** - DONE
    - Everything uses `[[double brackets]]`
-   - Schema rules use `[[#tag]]+: type` syntax inside `---schema---` block
 
 ## Files Updated
 
@@ -39,16 +39,14 @@
 ## New Syntax Example
 
 ```flextag
----meta---
-[[#plugin @plugins.chart version=1.0 author="someone"]]
----/meta---
+[[#plugin #plugins.chart version=1.0 author="someone"]]: file-metadata
+[[/]]
 
----schema---
-[[#notes #draft]]+: text
-[[#config]]: yaml
----/schema---
+[[#notes*]]: ftml-schema
+title: str
+[[/]]
 
-[[#notes #draft]]
+[[#notes #draft title="My Note"]]
 This is a draft note
 [[/]]
 

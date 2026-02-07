@@ -431,15 +431,14 @@ class TestRecursiveDirectoryLoading(unittest.TestCase):
         self.assertIn(".ft", extensions)
 
 
-class TestMetaBlock(unittest.TestCase):
-    """Tests for ---meta--- block parsing."""
+class TestFileMetadata(unittest.TestCase):
+    """Tests for file-metadata section parsing."""
 
-    def test_meta_block_basic(self):
-        """Test basic ---meta--- block parsing."""
+    def test_file_metadata_basic(self):
+        """Test basic file-metadata section parsing."""
         data = """
----meta---
-[[#plugin @plugins.chart version=1.0]]
----/meta---
+[[#plugin #plugins.chart version=1.0]]: file-metadata
+[[/]]
 
 [[#content]]
 Hello world
@@ -451,19 +450,18 @@ Hello world
         self.assertIn("#plugins.chart", container.tags)
         self.assertEqual(container.parameters.get("version"), 1.0)
 
-    def test_meta_block_filtering(self):
-        """Test that containers can be filtered by meta tags."""
+    def test_file_metadata_filtering(self):
+        """Test that containers can be filtered by file-metadata tags."""
         data = """
----meta---
-[[#plugin @plugins.chart]]
----/meta---
+[[#plugin #plugins.chart]]: file-metadata
+[[/]]
 
 [[#content]]
 Chart plugin content
 [[/]]
         """
         view = FlexTag.load(string=data, validate=False)
-        # Container should have the tags from meta block
+        # Container should have the tags from file-metadata section
         self.assertIn("#plugin", view.containers[0].tags)
 
 

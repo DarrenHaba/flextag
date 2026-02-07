@@ -1,12 +1,11 @@
 ## [0.4.0a1] - 2026-02-07
 
 ### BREAKING CHANGES
-- **Unified tag system**: `@path` syntax removed — use `#tag` with hierarchical dots instead (e.g., `#config.database` replaces `@config.database`)
-- **Tag matching default changed**: `#tag` now matches exactly by default (not descendants). Use `#tag*` for descendant matching (old `@path` behavior)
+- **Hierarchical tags replace `@path`**: `@path` syntax removed — tags now support dot-separated hierarchy (e.g., `#config.database` replaces `@config.database`). The old `@config` would automatically match `@config.database`, `@config.cache`, etc. Hierarchical tags do not — filtering for `#config` will NOT match a section tagged `#config.database`. To get descendant matching, use `#config*` explicitly
+- **Schema system completely redesigned**: The old single `[[]]: schema` section with strict rules and quantifiers (`?`, `+`, `*`) is gone. Replaced with tag-based `ftml-schema` sections — each schema is a regular section that matches by tags and validates header properties. Multiple schemas can coexist, each targeting different tags
 - **Section IDs removed**: Sections are identified solely by tags and parameters
-- **`container` section type renamed to `file-metadata`**: `[[]]: container` is now `[[]]: file-metadata`
+- **`container` section type renamed to `file-metadata`**: `[[]]: container` is now `[[#tags params]]: file-metadata` — file-level metadata now lives in the section header like everything else
 - New universal closing tag `[[/]]` replaces ID-specific closing tags like `[[/section_id]]`
-- New `---meta---` block syntax for file-level metadata
 - Removed single bracket `[]` notation entirely
 - Renamed `raw` content type to `text` (default type for sections without explicit type)
 - Removed encoding types: `utf-8`, `latin-1`, `ascii`, `utf-16` and their aliases
@@ -15,10 +14,8 @@
 ### Added
 - **Tag matching modifiers**: `#tag` (exact), `#tag*` (self + descendants), `#tag+` (immediate children only)
 - **Tag negation**: `!#tag` excludes sections with that tag (works in both filters and schemas)
-- **`match_tag()` function**: Shared matching logic used by both filter queries and schema validation
-- **`PropertySchema` system**: Tag-based schema validation for header properties and FTML body content using `ftml-schema` sections
-- **`file-metadata` section type**: Renamed from `container` for clarity
-- `---meta---` block for file-level metadata (tags, parameters)
+- **New schema system**: `ftml-schema` section type — schemas are regular sections that target other sections by tag matching. A schema `[[#product*]]: ftml-schema` validates all `#product` descendants. Multiple schemas can apply to the same section (AND logic). Schemas validate both header properties and FTML body content
+- **`match_tag()` function**: Shared matching logic used by both filter queries and schema validation — one system, not two
 - `binary` content type for raw byte data (returns `bytes` instead of `str`)
 - `recursive` parameter for `load()` — recursively search subdirectories when using `dir=` (default: True)
 - Schema documentation: `doc/schema/README.md` (user-facing) and `doc/dev/schema/` (dev notes)
@@ -32,20 +29,19 @@
 - Section syntax: `[[#tag param=value]]: type` instead of `[[id #tag @path]]: type`
 - Closing tag: `[[/]]` instead of `[[/id]]`
 - Tags and paths unified under `#tag` with dot-separated hierarchy (e.g., `#plugins.chart`)
-- Schema matching uses same syntax as filter queries (`#tag`, `#tag*`, `#tag+`, `!#tag`)
-- Schema checks for tag presence, not exclusivity — extra tags on a section are fine
+- File-level metadata uses standard section header syntax — no more body parsing with single bracket notation
 - Default section type is now `text` (functionally same as old `raw`)
 - Simplified content type system: `text`, `binary`, and markup types (json, yaml, toml, ftml)
 - Simplified API: access sections via `view.sections` and content via `section.content`
 
 ### Removed
 - `@path` syntax — use `#tag` with hierarchical dots and modifiers instead
+- Old `[[]]: schema` system with quantifiers (`?`, `+`, `*`) and strict mode — replaced by `ftml-schema` sections
 - Section IDs — use tags (`#tag`) to identify and filter sections
 - ID-specific closing tags — all sections close with `[[/]]`
 - Single bracket notation `[]`
 - `[[]]: container` syntax — renamed to `[[]]: file-metadata`
-- `[[]]: schema` syntax — use `ftml-schema` sections or `---schema---` block instead
-- `[[]]: defaults` syntax — use `---meta---` block instead
+- `[[]]: defaults` syntax
 - `to_dict()` — access parsed content directly via `section.content`
 - `to_flexmap()` — use `view.sections` and `view.filter()` instead
 - `FlexMap` and `FlexPoint` classes — use direct section access
@@ -54,7 +50,6 @@
 - Black and Flake8 (replaced with Ruff)
 
 ### Fixed
-- Schema matching no longer uses automatic descendant inheritance — exact match by default prevents unintended schema application
 - Made `tomli` conditional (only installed for Python < 3.11)
 
 ## [0.3.0a1] - 2025-05-20
