@@ -424,7 +424,7 @@ def _interpret_bracket_meta(
     except ValueError as e:
         # Extract column information from shlex error
         error_msg = str(e)
-        column_num = 1  # Default position
+        _column_num = 1  # Default position
 
         # shlex errors often indicate the position with messages like:
         # "No closing quotation at position 10"
@@ -438,13 +438,13 @@ def _interpret_bracket_meta(
                 # Find where bracket_str starts in original_line
                 start_idx = original_line.find(bracket_str.split()[0])
                 if start_idx >= 0:
-                    column_num = (
+                    _column_num = (
                         start_idx + pos_in_bracket + 1
                     )  # +1 for 1-based indexing
                 else:
-                    column_num = pos_in_bracket + 1
+                    _column_num = pos_in_bracket + 1
             else:
-                column_num = pos_in_bracket + 1
+                _column_num = pos_in_bracket + 1
 
     section_id = ""
     tags = []
@@ -520,7 +520,7 @@ def _parse_defaults_block(defaults_section) -> (str, list, dict):
     # We only want the *first* bracket block in the defaults content (if any).
     while i < n:
         line = content_lines[i].rstrip("\n")
-        if not line.strip() or line.strip().startswith("#"):
+        if not line.strip() or line.strip().startswith("//"):
             # Skip blank or comment
             i += 1
             continue
@@ -674,7 +674,7 @@ class PropertySchema:
                 lines.append(f'{key} = {"true" if value else "false"}')
             elif value is None:
                 lines.append(f"{key} = null")
-            elif isinstance(value, (int, float)):
+            elif isinstance(value, int | float):
                 lines.append(f"{key} = {value}")
             elif isinstance(value, list):
                 # Handle lists - convert to FTML array syntax
@@ -733,7 +733,7 @@ def parse_ftml(content: str) -> Any:
         # Use the actual FTML parser
         return ftml.load(content)
     except Exception as e:
-        raise FlexTagSyntaxError(f"FTML parsing error: {e}")
+        raise FlexTagSyntaxError(f"FTML parsing error: {e}") from e
 
 
 def parse_yaml(content: str) -> Any:
@@ -749,7 +749,7 @@ def parse_yaml(content: str) -> Any:
         logger.debug("Parsing content with YAML library")
         return yaml.safe_load(content)
     except yaml.YAMLError as e:
-        raise FlexTagSyntaxError(f"YAML parsing error: {e}")
+        raise FlexTagSyntaxError(f"YAML parsing error: {e}") from e
 
 
 def parse_json(content: str) -> Any:
@@ -760,7 +760,7 @@ def parse_json(content: str) -> Any:
         logger.debug("Parsing content with JSON library")
         return json.loads(content)
     except json.JSONDecodeError as e:
-        raise FlexTagSyntaxError(f"JSON parsing error: {e}")
+        raise FlexTagSyntaxError(f"JSON parsing error: {e}") from e
 
 
 def parse_toml(content: str) -> Any:
@@ -776,7 +776,7 @@ def parse_toml(content: str) -> Any:
         logger.debug("Parsing content with TOML library")
         return tomllib.loads(content)
     except Exception as e:
-        raise FlexTagSyntaxError(f"TOML parsing error: {e}")
+        raise FlexTagSyntaxError(f"TOML parsing error: {e}") from e
 
 
 def validate_ftml(content: str, schema: str) -> list[str]:
@@ -868,7 +868,7 @@ class FlexParser:
         while i < n:
             line = lines[i].rstrip("\n")
 
-            if not line.strip() or line.strip().startswith("#"):
+            if not line.strip() or line.strip().startswith("//"):
                 i += 1
                 continue
 
@@ -941,9 +941,9 @@ class FlexParser:
                 sections.append(section_data)
             else:
                 # Check if this is a non-empty line that's not a comment
-                if line.strip() and not line.strip().startswith("#"):
+                if line.strip() and not line.strip().startswith("//"):
                     raise FlexTagSyntaxError(
-                        "Lines between sections must be comments starting with #",
+                        "Lines between sections must be comments starting with //",
                         line_num=i + 1,
                         column_num=1,
                         source_name=source_name,
@@ -979,7 +979,7 @@ class FlexParser:
                 f"Error parsing bracket metadata: {e}",
                 line_num=line_num,
                 source_name=source_name,
-            )
+            ) from e
 
         # IDs are no longer used - sections are identified by tags/parameters
         section_id = ""
@@ -1045,13 +1045,13 @@ class FlexParser:
         elif type_name in ("int", "integer"):
             try:
                 return int(value_str)
-            except ValueError:
-                raise FlexTagSyntaxError(f"Cannot convert '{value_str}' to int")
+            except ValueError as e:
+                raise FlexTagSyntaxError(f"Cannot convert '{value_str}' to int") from e
         elif type_name == "float":
             try:
                 return float(value_str)
-            except ValueError:
-                raise FlexTagSyntaxError(f"Cannot convert '{value_str}' to float")
+            except ValueError as e:
+                raise FlexTagSyntaxError(f"Cannot convert '{value_str}' to float") from e
         elif type_name == "bool":
             lower_val = value_str.lower()
             if lower_val == "true":
@@ -1196,7 +1196,7 @@ class Section:
             except Exception as e:
                 raise FlexTagSyntaxError(
                     f"FTML parsing error in section '{self.id}': {e}"
-                )
+                ) from e
 
         elif tname == "ftml-schema":
             # Schema sections store raw FTML schema content
@@ -1213,7 +1213,7 @@ class Section:
             except Exception as e:
                 raise FlexTagSyntaxError(
                     f"YAML parsing error in section '{self.id}': {e}"
-                )
+                ) from e
 
         elif tname == "json":
             # Parse with JSON library
@@ -1223,7 +1223,7 @@ class Section:
             except Exception as e:
                 raise FlexTagSyntaxError(
                     f"JSON parsing error in section '{self.id}': {e}"
-                )
+                ) from e
 
         elif tname == "toml":
             # Parse with TOML library
@@ -1233,7 +1233,7 @@ class Section:
             except Exception as e:
                 raise FlexTagSyntaxError(
                     f"TOML parsing error in section '{self.id}': {e}"
-                )
+                ) from e
 
         # file-metadata sections use header tags/params only, no body parsing needed
         elif tname == "file-metadata":

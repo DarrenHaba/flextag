@@ -51,7 +51,7 @@ class TestFlexParser:
     def test_section_with_comment(self, parser):
         """Test parsing a section with comments between sections"""
         content = """
-        # This is a valid comment.
+        // This is a valid comment.
         [[#test]]
         Content
         [[/]]"""
@@ -74,7 +74,7 @@ class TestFlexParser:
 
         error_msg = str(excinfo.value)
         assert "<string> L2" in error_msg
-        assert "Lines between sections must be comments starting with #" in error_msg
+        assert "Lines between sections must be comments starting with //" in error_msg
 
     def test_empty_content(self, parser):
         """Test handling of empty content sections"""
