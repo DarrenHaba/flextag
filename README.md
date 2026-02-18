@@ -65,6 +65,8 @@ print(prod_db[0].data)  # {'host': 'prod-db.example.com', 'port': 5432, ...}
 
 The tags you write ARE your search queries. That's the whole idea.
 
+**Filtering is case-insensitive** — tags can be written in whatever case makes sense (`#MyTag`, `#NASDAQ`, `#my_tag`) and queries will match regardless of case.
+
 ### Hierarchical Tag Navigation
 
 Tags support dot-separated hierarchy for deeper organization:

@@ -184,6 +184,9 @@ def match_tag(pattern: str, tags: list[str]) -> bool:
       #tag*  = self + all descendants
       #tag+  = immediate children only
 
+    Matching is case-insensitive — tags can be authored in any case
+    and queries will match regardless.
+
     This is the shared matching logic used by both schema matching
     and filter queries.
     """
@@ -199,22 +202,25 @@ def match_tag(pattern: str, tags: list[str]) -> bool:
         modifier = "+"
         pat = pat[:-1]
 
+    # Case-insensitive: lowercase the pattern once
+    pat_lower = pat.lower()
+
     for tag in tags:
-        tag_value = tag.lstrip("#")
+        tag_lower = tag.lstrip("#").lower()
 
         if modifier == "*":
             # Self + all descendants
-            if tag_value == pat or tag_value.startswith(pat + "."):
+            if tag_lower == pat_lower or tag_lower.startswith(pat_lower + "."):
                 return True
         elif modifier == "+":
             # Immediate children only
-            if tag_value.startswith(pat + "."):
-                remainder = tag_value[len(pat) + 1:]
+            if tag_lower.startswith(pat_lower + "."):
+                remainder = tag_lower[len(pat_lower) + 1:]
                 if "." not in remainder:
                     return True
         else:
             # Exact match (default)
-            if tag_value == pat:
+            if tag_lower == pat_lower:
                 return True
 
     return False
@@ -380,10 +386,17 @@ def parse_basic_value(s: str):
 def compare_op(lhs: Any, rhs: Any, op: str) -> bool:
     """
     Compare two values using the operator from the query syntax.
+
+    String equality (= and !=) is case-insensitive.
+    Numeric comparisons (>, <, >=, <=) are unaffected.
     """
     if op == "=":
+        if isinstance(lhs, str) and isinstance(rhs, str):
+            return lhs.lower() == rhs.lower()
         return lhs == rhs
     if op == "!=":
+        if isinstance(lhs, str) and isinstance(rhs, str):
+            return lhs.lower() != rhs.lower()
         return lhs != rhs
     try:
         lf, rf = float(lhs), float(rhs)
