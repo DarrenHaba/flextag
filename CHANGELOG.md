@@ -1,56 +1,63 @@
 ## [0.4.0a1] - 2026-02-07
 
-### BREAKING CHANGES
-- **Hierarchical tags replace `@path`**: `@path` syntax removed — tags now support dot-separated hierarchy (e.g., `#config.database` replaces `@config.database`). The old `@config` would automatically match `@config.database`, `@config.cache`, etc. Hierarchical tags do not — filtering for `#config` will NOT match a section tagged `#config.database`. To get descendant matching, use `#config*` explicitly
-- **Schema system completely redesigned**: The old single `[[]]: schema` section with strict rules and quantifiers (`?`, `+`, `*`) is gone. Replaced with tag-based `ftml-schema` sections — each schema is a regular section that matches by tags and validates header properties. Multiple schemas can coexist, each targeting different tags
-- **Section IDs removed**: Sections are identified solely by tags and parameters
-- **`container` section type renamed to `file-metadata`**: `[[]]: container` is now `[[#tags params]]: file-metadata` — file-level metadata now lives in the section header like everything else
-- New universal closing tag `[[/]]` replaces ID-specific closing tags like `[[/section_id]]`
-- Removed single bracket `[]` notation entirely
-- Renamed `raw` content type to `text` (default type for sections without explicit type)
-- Removed encoding types: `utf-8`, `latin-1`, `ascii`, `utf-16` and their aliases
-- Removed `to_dict()`, `to_flexmap()`, `FlexMap`, `FlexPoint` — use `view.sections` and `section.content` instead
+Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 
-### Added
-- **Tag matching modifiers**: `#tag` (exact), `#tag*` (self + descendants), `#tag+` (immediate children only)
-- **Tag negation**: `!#tag` excludes sections with that tag (works in both filters and schemas)
-- **New schema system**: `ftml-schema` section type — schemas are regular sections that target other sections by tag matching. A schema `[[#product*]]: ftml-schema` validates all `#product` descendants. Multiple schemas can apply to the same section (AND logic). Schemas validate both header properties and FTML body content
-- **`match_tag()` function**: Shared matching logic used by both filter queries and schema validation — one system, not two
-- `binary` content type for raw byte data (returns `bytes` instead of `str`)
-- `recursive` parameter for `load()` — recursively search subdirectories when using `dir=` (default: True)
-- Schema documentation: `doc/schema/README.md` (user-facing) and `doc/dev/schema/` (dev notes)
-- Multi-Python version CI testing (3.10, 3.11, 3.12, 3.13)
-- Cross-platform CI testing (Ubuntu, Windows, macOS)
-- `noxfile.py` for local multi-version testing
-- pytest runs on pre-commit hook
-- Replaced Black + Flake8 with Ruff for linting
+### Syntax
 
-### Changed
-- Section syntax: `[[#tag param=value]]: type` instead of `[[id #tag @path]]: type`
-- Closing tag: `[[/]]` instead of `[[/id]]`
-- Tags and paths unified under `#tag` with dot-separated hierarchy (e.g., `#plugins.chart`)
-- File-level metadata uses standard section header syntax — no more body parsing with single bracket notation
-- Default section type is now `text` (functionally same as old `raw`)
-- Simplified content type system: `text`, `binary`, and markup types (json, yaml, toml, ftml)
-- Simplified API: access sections via `view.sections` and content via `section.content`
+- Section headers: `[[#tag param=value]]: type` (IDs removed, tags are identity)
+- Closing tags: `[[/]]` (universal, no more `[[/id]]`)
+- File metadata: `[[#tags params]]: file-metadata` (replaces `[[]]: container`)
+- Comments between sections: `//` prefix (replaces `#` which conflicted with tags)
+- Default content type: `text` (replaces `raw`)
+
+### Tags
+
+- `@path` syntax removed — use `#tag` with dot-separated hierarchy (`#config.database`)
+- Exact match by default — `#config` does NOT match `#config.database`
+- Glob-style wildcards for filtering and schemas:
+  - `#tag` — exact match
+  - `#tag.*` — direct children (one level)
+  - `#tag.**` — all descendants (any depth)
+  - `#fo*` — character wildcard (name starts with prefix)
+- `!#tag` — negation (exclude sections with tag)
+- Case-insensitive matching — `#NASDAQ`, `#nasdaq`, `#Nasdaq` all match
+
+### Schema System
+
+- Old `[[]]: schema` with field quantifiers (`?`, `+`, `*`) removed entirely
+- New `ftml-schema` sections — schemas are regular sections that target by tags
+- `[[#product.**]]: ftml-schema` validates all descendants of `#product`
+- New `schema` content type — metadata-only validation (header params only, body ignored)
+- Multiple schemas can match one section (all validated independently)
+- Validates both header parameters and FTML body content (`ftml-schema`) or header only (`schema`)
+- `|` and `()` for OR groups in schema headers: `[[#product (#electronics | #clothing)]]: ftml-schema`
+- `strict=True` load parameter — every section must match at least one schema
+- Parameter constraint definitions in schema headers: `[[#item.* name:str price:float]]: schema`
+- `match_tag()` — shared matching logic for filters and schemas
+
+### Filtering
+
+- `view.filter()` uses same wildcard syntax as schemas
+- `|` pipe operator for OR: `view.filter("#electronics | #clothing")`
+- `()` grouping for OR within AND: `view.filter("#product (#electronics | #clothing)")`
+- Case-insensitive string comparisons for `=` and `!=` operators
+- Legacy `OR` keyword still supported
+- Parameter expressions: `market_cap>1000000`, `type="CS"`
+
+### Other
+
+- `binary` content type (returns `bytes`)
+- `recursive` parameter for `load()` with `dir=` (default: True)
+- Replaced Black + Flake8 with Ruff
+- Multi-Python CI (3.10–3.13), cross-platform (Ubuntu, Windows, macOS)
 
 ### Removed
-- `@path` syntax — use `#tag` with hierarchical dots and modifiers instead
-- Old `[[]]: schema` system with quantifiers (`?`, `+`, `*`) and strict mode — replaced by `ftml-schema` sections
-- Section IDs — use tags (`#tag`) to identify and filter sections
-- ID-specific closing tags — all sections close with `[[/]]`
-- Single bracket notation `[]`
-- `[[]]: container` syntax — renamed to `[[]]: file-metadata`
-- `[[]]: defaults` syntax
-- `to_dict()` — access parsed content directly via `section.content`
-- `to_flexmap()` — use `view.sections` and `view.filter()` instead
-- `FlexMap` and `FlexPoint` classes — use direct section access
-- Unused dependencies: duckdb, numpy, ftml, tomli-w
-- Encoding type aliases and re-encoding logic
-- Black and Flake8 (replaced with Ruff)
 
-### Fixed
-- Made `tomli` conditional (only installed for Python < 3.11)
+- Section IDs, `@path` syntax, single bracket `[]` notation
+- `[[]]: defaults` syntax
+- `to_dict()`, `to_flexmap()`, `FlexMap`, `FlexPoint`
+- Encoding types (`utf-8`, `latin-1`, `ascii`, `utf-16`)
+- Dependencies: duckdb, numpy, ftml, tomli-w, Black, Flake8
 
 ## [0.3.0a1] - 2025-05-20
 ### BREAKING CHANGES

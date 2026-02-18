@@ -7,8 +7,6 @@ This module provides the main entry points for the FlexTag library:
 - filter(...) -> filter sections or containers using query language
 """
 
-from typing import List, Optional, Union
-
 from .flextag import (
     FlexTag,
     FlexTagError,
@@ -42,6 +40,7 @@ def load(
     dir: str | list[str] | None = None,
     filter_query: str | None = None,
     validate: bool = True,
+    strict: bool = False,
     settings: FlexTagSettings | None = None,
     recursive: bool = True,
 ) -> FlexView:
@@ -54,6 +53,8 @@ def load(
         dir: Directory path(s) containing FlexTag files (.flextag or .ft)
         filter_query: Optional query to filter containers after loading
         validate: Whether to validate against any embedded schema
+        strict: If True, every non-schema section must match at least one schema.
+                Unmatched sections raise SchemaValidationError. (default: False)
         settings: Optional settings to control parsing behavior
         recursive: Whether to recursively search subdirectories when using dir=
                    (default: True)
@@ -72,6 +73,7 @@ def load(
         dir=dir,
         filter_query=filter_query,
         validate=validate,
+        strict=strict,
         settings=settings,
         recursive=recursive,
     )

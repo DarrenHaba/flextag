@@ -4,17 +4,46 @@
 
 Schema defines required fields for sections with matching tags.
 
-**Two separate validations occur:**
+## Two Schema Content Types
+
+### `ftml-schema` — Full Validation
+
+Validates both header properties AND FTML body content:
+
+```flextag
+[[#adapter.**]]: ftml-schema
+name: str
+adapter_type: str
+[[/]]
+```
+
+Two separate validations occur:
 1. **Header properties** — validated against the schema
 2. **FTML body content** — also validated against the same schema (when content type is `ftml`)
 
 These are independent. The header and body can have different data — both must satisfy the schema.
 
+### `schema` — Metadata-Only Validation
+
+Validates header properties only. Body content is ignored regardless of content type:
+
+```flextag
+// Only checks that matching sections have the right tags/params
+[[#symbol.* (#nyse | #nasdaq | #arca)]]: schema
+[[/]]
+
+// With property definitions — validates header params, ignores body
+[[#symbol.* name:str type:str]]: schema
+[[/]]
+```
+
+Use `schema` when you want to enforce tag/parameter structure on sections that use any content type (JSON, YAML, text, etc.) — or when you only care about metadata.
+
 ## Schema Section vs Data Section
 
 **Schema section** — defines the contract:
 ```flextag
-[[#adapter*]]: ftml-schema
+[[#adapter.**]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
@@ -28,24 +57,25 @@ coverage = ["US equities", "ETFs"]
 [[/]]
 ```
 
-Both the header properties AND the FTML body content are validated against the schema.
-
 The differences:
-- Type is `ftml-schema` for schema definitions, `ftml` for data
+- Type is `ftml-schema` or `schema` for schema definitions, anything else for data
 - Schema body uses FTML type definitions (`:` syntax)
 - Data body uses FTML data values (`=` syntax)
 - Header properties (on both) use `key=value`
+- Header property definitions on schema use `key:type` (e.g., `name:str`)
 
 ## Tag Matching Syntax
 
-Schema tags use the **same syntax as filter queries**:
+Schema tags use the **same glob-style wildcard syntax as filter queries**:
 
 | Syntax | Meaning |
 |--------|---------|
 | `#tag` | Exact match (default) |
-| `#tag*` | Self + all descendants |
-| `#tag+` | Immediate children only |
+| `#tag.*` | Direct children (one level) |
+| `#tag.**` | All descendants (any depth) |
+| `#fo*` | Character wildcard (name starts with prefix) |
 | `!#tag` | Negation (must NOT have tag) |
+| `(#a \| #b)` | OR group (at least one must match) |
 
 ### Exact Match (default)
 
@@ -64,11 +94,11 @@ description = "Does NOT match — #adapter.ohlcv is not #adapter"
 [[/]]
 ```
 
-### Descendants with `*`
+### All Descendants with `.**`
 
 ```flextag
-// Matches #adapter, #adapter.ohlcv, #adapter.ohlcv.yahoo, etc.
-[[#adapter*]]: ftml-schema
+// Matches #adapter.ohlcv, #adapter.ohlcv.yahoo, etc. (NOT #adapter itself)
+[[#adapter.**]]: ftml-schema
 name: str
 [[/]]
 
@@ -77,11 +107,11 @@ description = "Matches — #adapter.ohlcv is a descendant of #adapter"
 [[/]]
 ```
 
-### Immediate Children with `+`
+### Direct Children with `.*`
 
 ```flextag
 // Matches #adapter.ohlcv, #adapter.news — but NOT #adapter itself or #adapter.ohlcv.yahoo
-[[#adapter+]]: ftml-schema
+[[#adapter.*]]: ftml-schema
 adapter_type: str
 [[/]]
 
@@ -106,18 +136,30 @@ rate_limit: int
 [[/]]
 ```
 
+## OR Groups
+
+Use `|` with `()` to require at least one of several tags:
+
+```flextag
+// Section must have #adapter AND one of (#ohlcv | #news)
+[[#adapter (#ohlcv | #news)]]: ftml-schema
+name: str
+provides: [str]
+[[/]]
+```
+
 ## Layered Schemas
 
 You can build up requirements through multiple schemas:
 
 ```flextag
 // Base — all adapters need name
-[[#adapter*]]: ftml-schema
+[[#adapter.**]]: ftml-schema
 name: str
 [[/]]
 
 // OHLCV adapters also need timeframes
-[[#adapter.ohlcv*]]: ftml-schema
+[[#adapter.ohlcv.**]]: ftml-schema
 timeframes: [str]
 [[/]]
 

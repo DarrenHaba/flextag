@@ -175,14 +175,144 @@ BASIC_TYPES = {"text", "binary"}
 OP_PATTERN = re.compile(r"^([^=!<>]+)\s*(=|!=|>=|<=|>|<)\s*(.+)$")
 
 
+def _collapse_paren_groups(tokens: list[str]) -> list[str]:
+    """
+    Collapse parenthesized groups split by shlex back into single tokens.
+
+    shlex splits ``"(#nyse | #nasdaq)"`` into ``["(#nyse", "|", "#nasdaq)"]``.
+    This recombines them into ``["(#nyse | #nasdaq)"]``.
+    """
+    result: list[str] = []
+    depth = 0
+    group_parts: list[str] = []
+
+    for tok in tokens:
+        opens = tok.count("(")
+        closes = tok.count(")")
+
+        if depth > 0 or opens > 0:
+            group_parts.append(tok)
+            depth += opens - closes
+            if depth <= 0:
+                # Group complete — join and emit as single token
+                result.append(" ".join(group_parts))
+                group_parts = []
+                depth = 0
+        else:
+            result.append(tok)
+
+    # Unclosed paren — just pass through as-is
+    if group_parts:
+        result.extend(group_parts)
+
+    return result
+
+
+def parse_query(query: str) -> list[list[str]]:
+    """
+    Parse a filter/schema query string into an AST.
+
+    Returns a list of OR-clauses, where each clause is a list of AND-tokens.
+    Supports ``|`` for OR and ``()`` for grouping OR within an AND expression.
+
+    Examples::
+
+        "#draft | #final"
+            → [["#draft"], ["#final"]]
+
+        "#symbol.* (#nyse | #nasdaq)"
+            → [["#symbol.*", "(#nyse | #nasdaq)"]]
+
+        "#a #b | #c #d"
+            → [["#a", "#b"], ["#c", "#d"]]
+
+    Parenthesized groups are kept as single tokens (e.g., ``"(#nyse | #nasdaq)"``)
+    and evaluated later by the matcher.
+    """
+    query = query.strip()
+    if not query:
+        return []
+
+    # Tokenize — preserve parenthesized groups as single tokens
+    tokens: list[str] = []
+    i = 0
+    while i < len(query):
+        ch = query[i]
+        if ch == "(":
+            # Find matching close paren
+            depth = 1
+            j = i + 1
+            while j < len(query) and depth > 0:
+                if query[j] == "(":
+                    depth += 1
+                elif query[j] == ")":
+                    depth -= 1
+                j += 1
+            tokens.append(query[i:j])
+            i = j
+        elif ch in " \t":
+            i += 1
+        else:
+            # Regular token — read until whitespace or paren
+            j = i
+            while j < len(query) and query[j] not in " \t(":
+                j += 1
+            tokens.append(query[i:j])
+            i = j
+
+    # Split on | into OR-clauses, each clause is a list of AND-tokens
+    # Also support legacy "OR" keyword
+    clauses: list[list[str]] = [[]]
+    for tok in tokens:
+        if tok == "|" or tok.upper() == "OR":
+            clauses.append([])
+        else:
+            clauses[-1].append(tok)
+
+    # Remove empty clauses
+    return [c for c in clauses if c]
+
+
+def match_group(group_token: str, tags: list[str]) -> bool:
+    """
+    Evaluate a parenthesized OR-group against a list of tags.
+
+    ``"(#nyse | #nasdaq | #arca)"`` → True if any alternative matches.
+    Each alternative inside the group is a single tag token.
+    """
+    inner = group_token.strip("()")
+    alternatives = [alt.strip() for alt in inner.split("|")]
+    for alt in alternatives:
+        if not alt:
+            continue
+        neg = False
+        tag = alt
+        if tag.startswith("!"):
+            neg = True
+            tag = tag[1:].strip()
+        matched = match_tag(tag, tags)
+        if neg:
+            matched = not matched
+        if matched:
+            return True
+    return False
+
+
 def match_tag(pattern: str, tags: list[str]) -> bool:
     """
     Match a single tag pattern against a list of tags.
 
-    Uses the same syntax as filter queries:
-      #tag   = exact match (default)
-      #tag*  = self + all descendants
-      #tag+  = immediate children only
+    Glob-style syntax with dot-separated hierarchy:
+
+      #tag        exact match
+      #fo*        character wildcard — tag name starts with "fo"
+      #tag.*      hierarchy one level — direct children of #tag
+      #tag.**     hierarchy any depth — all descendants of #tag
+      #tag.fo*    combined — children of #tag starting with "fo"
+
+    The dot is the hierarchy separator. The wildcard ``*`` operates
+    on characters when inline (``#fo*``) and on hierarchy segments
+    when it appears as a standalone segment after a dot (``.*`` / ``.**``).
 
     Matching is case-insensitive — tags can be authored in any case
     and queries will match regardless.
@@ -190,40 +320,65 @@ def match_tag(pattern: str, tags: list[str]) -> bool:
     This is the shared matching logic used by both schema matching
     and filter queries.
     """
-    # Strip # prefix from pattern
     pat = pattern.lstrip("#")
-
-    # Detect modifier suffix
-    modifier = None
-    if pat.endswith("*"):
-        modifier = "*"
-        pat = pat[:-1]
-    elif pat.endswith("+"):
-        modifier = "+"
-        pat = pat[:-1]
-
-    # Case-insensitive: lowercase the pattern once
     pat_lower = pat.lower()
 
     for tag in tags:
         tag_lower = tag.lstrip("#").lower()
-
-        if modifier == "*":
-            # Self + all descendants
-            if tag_lower == pat_lower or tag_lower.startswith(pat_lower + "."):
-                return True
-        elif modifier == "+":
-            # Immediate children only
-            if tag_lower.startswith(pat_lower + "."):
-                remainder = tag_lower[len(pat_lower) + 1:]
-                if "." not in remainder:
-                    return True
-        else:
-            # Exact match (default)
-            if tag_lower == pat_lower:
-                return True
+        if _match_pattern(pat_lower, tag_lower):
+            return True
 
     return False
+
+
+def _match_pattern(pat: str, tag: str) -> bool:
+    """
+    Core pattern matching — both strings already lowercase, no # prefix.
+
+    Handles three cases based on the pattern structure:
+      1. Ends with ``.**`` — hierarchy any depth (all descendants)
+      2. Ends with ``.*``  — hierarchy one level (direct children)
+      3. Contains ``*``    — character wildcard (prefix match)
+      4. No wildcard       — exact match
+    """
+    # Case 1: hierarchy any depth — #foo.**
+    if pat.endswith(".**"):
+        prefix = pat[:-3]  # strip ".**"
+        return tag.startswith(prefix + ".")
+
+    # Case 2: hierarchy one level — #foo.*
+    if pat.endswith(".*"):
+        prefix = pat[:-2]  # strip ".*"
+        if not tag.startswith(prefix + "."):
+            return False
+        remainder = tag[len(prefix) + 1:]
+        return "." not in remainder
+
+    # Case 3: character wildcard anywhere in pattern
+    if "*" in pat:
+        # Split pattern on dots to handle combined patterns like #exchange.na*
+        pat_segments = pat.split(".")
+        tag_segments = tag.split(".")
+
+        # Must have same number of segments
+        if len(pat_segments) != len(tag_segments):
+            return False
+
+        # Each segment must match
+        for p_seg, t_seg in zip(pat_segments, tag_segments, strict=True):
+            if "*" in p_seg:
+                # Character wildcard — prefix match within this segment
+                prefix = p_seg.rstrip("*")
+                if not t_seg.startswith(prefix):
+                    return False
+            else:
+                # Exact segment match
+                if p_seg != t_seg:
+                    return False
+        return True
+
+    # Case 4: exact match (no wildcard)
+    return pat == tag
 
 
 def format_error_location(source_name, line_num, column_num):
@@ -432,7 +587,7 @@ def _interpret_bracket_meta(
         logger.debug(f"Self-closing detected. Stripped bracket: {bracket_str!r}")
 
     try:
-        tokens = shlex.split(bracket_str)
+        tokens = _collapse_paren_groups(shlex.split(bracket_str))
         logger.debug(f"Tokens: {tokens!r}")
     except ValueError as e:
         # Extract column information from shlex error
@@ -494,7 +649,10 @@ def _interpret_bracket_meta(
 
     # Process the rest of the tokens
     for t in tokens:
-        if t.startswith("#") or t.startswith("!#"):
+        if t.startswith("(") and t.endswith(")"):
+            # OR group — kept as single token for schema/filter matching
+            tags.append(t)
+        elif t.startswith("#") or t.startswith("!#"):
             tags.append(t)
         elif t.startswith("@"):
             # Legacy @ prefix - convert to #tag
@@ -579,15 +737,16 @@ class PropertySchema:
     Defines validation rules for sections matching specific tags.
 
     Schema tags use the SAME syntax as filter queries:
-      #tag   = exact match (default)
-      #tag*  = self + all descendants
-      #tag+  = immediate children only
-      !#tag  = negation (must NOT have tag)
+      #tag     = exact match (default)
+      #fo*     = character wildcard (name starts with "fo")
+      #tag.*   = hierarchy one level (direct children)
+      #tag.**  = hierarchy any depth (all descendants)
+      !#tag    = negation (must NOT have tag)
 
     Examples:
         [[#adapter]]: ftml-schema            — matches only sections with exactly #adapter
-        [[#adapter*]]: ftml-schema           — matches #adapter, #adapter.live, #adapter.live.binance, etc.
-        [[#adapter+]]: ftml-schema           — matches #adapter.live, #adapter.historical (one level)
+        [[#adapter.**]]: ftml-schema         — matches #adapter.live, #adapter.live.binance, etc.
+        [[#adapter.*]]: ftml-schema          — matches #adapter.live, #adapter.historical (one level)
         [[#adapter #live]]: ftml-schema      — matches sections with BOTH exact #adapter AND exact #live
         [[#adapter !#deprecated]]: ftml-schema — matches sections with #adapter but NOT #deprecated
 
@@ -602,10 +761,12 @@ class PropertySchema:
         tags: list[str],
         property_definitions: str,
         source_section: "Section",
+        schema_type: str = "ftml-schema",
     ):
-        self.tags = tags  # e.g., ["#adapter*", "#live"]
+        self.tags = tags  # e.g., ["#adapter.**", "#live"]
         self.property_definitions = property_definitions  # FTML schema content
         self.source_section = source_section
+        self.schema_type = schema_type  # "ftml-schema" or "schema"
 
     def __repr__(self):
         return f"<PropertySchema tags={self.tags}>"
@@ -615,15 +776,24 @@ class PropertySchema:
         Check if this schema applies to the given section.
 
         Uses the same tag matching syntax as filter queries:
-          #tag   = exact match (default)
-          #tag*  = self + all descendants
-          #tag+  = immediate children only
-          !#tag  = negation (must NOT have tag)
+          #tag     = exact match (default)
+          #fo*     = character wildcard (name starts with "fo")
+          #tag.*   = hierarchy one level (direct children)
+          #tag.**  = hierarchy any depth (all descendants)
+          !#tag    = negation (must NOT have tag)
+          (#a | #b) = OR group (at least one must match)
 
         ALL schema tags must match (AND logic). Each tag is matched
-        independently against the section's tags.
+        independently against the section's tags. Parenthesized
+        groups are evaluated as OR — at least one alternative must match.
         """
         for schema_tag in self.tags:
+            # OR group — (#a | #b | #c)
+            if schema_tag.startswith("(") and schema_tag.endswith(")"):
+                if not match_group(schema_tag, section.tags):
+                    return False
+                continue
+
             neg = False
             tag = schema_tag
             if tag.startswith("!"):
@@ -640,18 +810,22 @@ class PropertySchema:
         """
         Validate section against schema definitions.
 
-        TWO SEPARATE VALIDATIONS:
+        For ftml-schema: TWO SEPARATE VALIDATIONS occur:
         1. Header properties - always validated against schema
         2. FTML body content - validated if section's content type is 'ftml'
 
-        Both validations use the same schema definitions but are independent.
-        The header and body can have different data - both must be valid.
+        For schema (metadata-only): ONLY header properties are validated.
+        Body content is ignored regardless of content type.
 
         Returns list of error messages (empty if valid).
         """
         errors = []
 
-        # Validation 1: Header properties
+        # Skip header validation if no property definitions
+        if not self.property_definitions.strip():
+            return errors
+
+        # Validation 1: Header properties (both schema types)
         try:
             params_ftml = self._parameters_to_ftml(section.parameters)
             header_errors = validate_ftml(params_ftml, self.property_definitions)
@@ -660,8 +834,8 @@ class PropertySchema:
         except Exception as e:
             errors.append(f"Header validation error: {str(e)}")
 
-        # Validation 2: FTML body content (only if content type is 'ftml')
-        if section.type_name.lower() == "ftml":
+        # Validation 2: FTML body content (ftml-schema only, not schema)
+        if self.schema_type == "ftml-schema" and section.type_name.lower() == "ftml":
             try:
                 body_content = section.raw_content
                 if body_content.strip():  # Only validate non-empty body
@@ -907,7 +1081,7 @@ class FlexParser:
                 open_line = i
                 bracket_str = m_open.group(1) or ""
                 type_decl = m_open.group(2) or ""
-                section_id, tags, params, is_self_closing = (
+                section_id, tags, params, is_self_closing, schema_defs = (
                     self._interpret_open_bracket(bracket_str, source_name, i + 1)
                 )
 
@@ -949,6 +1123,7 @@ class FlexParser:
                     "is_self_closing": is_self_closing,
                     "type_decl": type_decl,
                     "raw_content": raw_content,
+                    "schema_defs": schema_defs,
                 }
 
                 sections.append(section_data)
@@ -986,7 +1161,7 @@ class FlexParser:
 
         # Use shlex to properly split on spaces while respecting quotes
         try:
-            tokens = shlex.split(bracket_str)
+            tokens = _collapse_paren_groups(shlex.split(bracket_str))
         except ValueError as e:
             raise FlexTagSyntaxError(
                 f"Error parsing bracket metadata: {e}",
@@ -998,31 +1173,50 @@ class FlexParser:
         section_id = ""
         tags = []
         params = {}
+        schema_defs = []  # Raw constraint definitions (e.g., "market_cap:int<min=0>")
 
-        # Parse all tokens as #tag or key=value (@ is legacy, converted to #)
+        # Parse all tokens as #tag, OR group, key=value, or schema def
         for t in tokens:
-            if t.startswith("#") or t.startswith("!#"):
+            if t.startswith("(") and t.endswith(")"):
+                # OR group — kept as single token for schema/filter matching
+                tags.append(t)
+            elif t.startswith("#") or t.startswith("!#"):
                 tags.append(t)
             elif t.startswith("@"):
                 # Legacy @ prefix - convert to #tag
                 tags.append("#" + t[1:])
+            elif ":" in t and "<" in t and "=" not in t.split("<")[0]:
+                # Schema property definition with constraints: key:type<constraint>
+                # e.g., market_cap:int<min=0> or name:str<min_length=1>
+                # The = only appears inside <>, not as key=value assignment
+                schema_defs.append(t)
             elif "=" in t:
-                k, v = t.split("=", 1)
-                k = k.strip()
-
-                # Check for explicit type annotation
-                if ":" in k:
-                    key, type_name = k.split(":", 1)
-                    key = key.strip()
-                    type_name = type_name.strip().lower()
-
-                    # Convert value based on an explicit type
-                    val = self._convert_value_by_type(v, type_name)
-                    params[key] = val
+                # Check if = is only inside <> (constraint def with no value)
+                before_angle = t.split("<")[0] if "<" in t else t
+                if "=" not in before_angle and ":" in t:
+                    # e.g., market_cap:int<min=0> — constraint def, not key=value
+                    schema_defs.append(t)
                 else:
-                    # No explicit type, use automatic inference
-                    val = parse_basic_value(v)
-                    params[k] = val
+                    k, v = t.split("=", 1)
+                    k = k.strip()
+
+                    # Check for explicit type annotation
+                    if ":" in k:
+                        key, type_name = k.split(":", 1)
+                        key = key.strip()
+                        type_name = type_name.strip().lower()
+
+                        # Convert value based on an explicit type
+                        val = self._convert_value_by_type(v, type_name)
+                        params[key] = val
+                    else:
+                        # No explicit type, use automatic inference
+                        val = parse_basic_value(v)
+                        params[k] = val
+            elif ":" in t:
+                # Schema property definition without constraints: key:type
+                # e.g., name:str or price:float (no =value, no <constraints>)
+                schema_defs.append(t)
             else:
                 # Invalid token - neither a tag nor key=value parameter
                 # This might be someone trying to use an ID (no longer supported)
@@ -1033,7 +1227,7 @@ class FlexParser:
                     source_name=source_name,
                 )
 
-        return section_id, tags, params, is_self_closing
+        return section_id, tags, params, is_self_closing, schema_defs
 
     def _convert_value_by_type(self, value_str: str, type_name: str):
         """
@@ -1128,6 +1322,7 @@ class Section:
         self.inherited_tags: list[str] = []
         self.inherited_params: dict[str, Any] = {}
         self.inherited_type: str | None = None
+        self.schema_defs: list[str] = []  # Raw constraint defs from header
 
     def __repr__(self):
         return f"<Section ID={self.id!r} type={self.type_name!r}>"
@@ -1218,6 +1413,12 @@ class Section:
             logger.debug(f"Section ID='{self.id}' is an ftml-schema section.")
             return raw
 
+        elif tname == "schema":
+            # Metadata-only schema — validates tags/params, body is ignored
+            # Processed in Container initialization like ftml-schema
+            logger.debug(f"Section ID='{self.id}' is a schema section.")
+            return raw
+
         elif tname == "yaml":
             # Parse with YAML library
             try:
@@ -1291,6 +1492,8 @@ class Container:
                 self.file_metadata = sec
             elif stype == "defaults":
                 self.defaults = sec
+            elif stype in ("ftml-schema", "schema"):
+                pass  # Schema sections collected separately, not in results
             else:
                 self.sections.append(sec)
 
@@ -1340,20 +1543,28 @@ class Container:
                 f"Section after: id={s.id}, tags={s.tags}, inherited_tags={s.inherited_tags}"
             )
 
-    def validate_schema(self):
+    def validate_schema(self, strict: bool = False):
         """
-        Validate header properties of sections against matching property schemas.
+        Validate sections against matching property schemas.
 
         Schema matching is tag-based:
         - A schema applies to a section if the section's tags CONTAIN all of the schema's tags
         - Multiple schemas can match one section (all are applied)
-        - Nested tag inheritance: #schema.product.laptop matches #schema.product schema
+        - strict=True: every non-schema section must match at least one schema
         """
         if hasattr(self, "property_schemas") and self.property_schemas:
             logger.debug(
                 f"Validating with {len(self.property_schemas)} property schemas."
             )
-            self._validate_property_schemas()
+            self._validate_property_schemas(strict=strict)
+        elif strict and self.sections:
+            # Strict mode but no schemas — every section is unmatched
+            sec = self.sections[0]
+            raise SchemaValidationError(
+                f"Strict mode: section at line {sec.open_line} does not match any schema",
+                source_file=self.source_name,
+                line_num=sec.open_line,
+            )
         else:
             logger.debug("No property schemas present. Skipping validation.")
 
@@ -1363,22 +1574,42 @@ class Container:
 
     def _collect_property_schemas(self):
         """
-        Collect all PropertySchema definitions from ftml-schema sections.
+        Collect all PropertySchema definitions from schema sections.
+
+        Two schema content types:
+          ftml-schema — validates header properties AND FTML body content
+          schema      — validates header properties only (metadata-only)
 
         Schema tags use the same syntax as filter queries:
           [[#adapter]]: ftml-schema    — exact match only
-          [[#adapter*]]: ftml-schema   — self + all descendants
-          [[#adapter+]]: ftml-schema   — immediate children only
+          [[#adapter.**]]: ftml-schema — all descendants (any depth)
+          [[#adapter.*]]: ftml-schema  — direct children only (one level)
         """
         self.property_schemas: list[PropertySchema] = []
 
-        # Find all ftml-schema sections
         for section in self.raw_sections:
-            if section.type_name.lower() == "ftml-schema":
+            stype = section.type_name.lower()
+            if stype in ("ftml-schema", "schema"):
+                # Merge header constraint defs into body property definitions
+                prop_defs = section.raw_content
+                if hasattr(section, "schema_defs") and section.schema_defs:
+                    # Convert header defs like "market_cap:int<min=0>"
+                    # to FTML schema lines like "market_cap: int<min=0>"
+                    header_lines = []
+                    for sd in section.schema_defs:
+                        key, type_def = sd.split(":", 1)
+                        header_lines.append(f"{key.strip()}: {type_def.strip()}")
+                    header_defs = "\n".join(header_lines)
+                    if prop_defs.strip():
+                        prop_defs = header_defs + "\n" + prop_defs
+                    else:
+                        prop_defs = header_defs
+
                 schema = PropertySchema(
                     tags=section.tags,
-                    property_definitions=section.raw_content,
+                    property_definitions=prop_defs,
                     source_section=section,
+                    schema_type=stype,
                 )
                 self.property_schemas.append(schema)
                 logger.debug(f"Collected property schema: {schema}")
@@ -1392,23 +1623,45 @@ class Container:
             return []
         return [s for s in self.property_schemas if s.matches_section(section)]
 
-    def _validate_property_schemas(self):
+    def _validate_property_schemas(self, strict: bool = False):
         """
         Validate sections against matching property schemas.
 
-        Schema tags use the same syntax as filter queries (#tag, #tag*, #tag+).
+        Schema tags use the same syntax as filter queries (#tag, #tag.*, #tag.**).
         Multiple schemas can match one section — all are applied.
+
+        If strict=True, every non-schema, non-file-metadata section must match
+        at least one schema. Unmatched sections raise SchemaValidationError.
         """
         if not hasattr(self, "property_schemas") or not self.property_schemas:
+            if strict and self.sections:
+                # Strict mode but no schemas — every section is unmatched
+                sec = self.sections[0]
+                raise SchemaValidationError(
+                    f"Strict mode: section at line {sec.open_line} does not match any schema",
+                    source_file=self.source_name,
+                    line_num=sec.open_line,
+                )
             logger.debug("No property schemas present. Skipping validation.")
             return
 
+        schema_types = {"ftml-schema", "schema"}
+
         for section in self.sections:
             # Skip schema sections themselves
-            if section.type_name.lower() == "ftml-schema":
+            if section.type_name.lower() in schema_types:
                 continue
 
             matching_schemas = self._find_matching_schemas(section)
+
+            # Strict mode: every section must match at least one schema
+            if strict and not matching_schemas:
+                raise SchemaValidationError(
+                    f"Strict mode: section at line {section.open_line} does not match any schema",
+                    source_file=self.source_name,
+                    line_num=section.open_line,
+                )
+
             for schema in matching_schemas:
                 errors = schema.validate(section)
                 if errors:
@@ -1496,15 +1749,15 @@ class FlexView:
     def filter(self, query: str, target: str = "sections") -> "FlexView":
         """
         Provide a param/tag-based filter for sections or containers.
+
+        Supports ``|`` for OR, ``()`` for grouping, space for AND::
+
+            view.filter("#draft | #final")           # OR
+            view.filter("#stock (#nyse | #nasdaq)")   # AND with OR group
+            view.filter("#stock #cap.mega")            # AND
         """
         logger.debug(f"Filtering with query='{query}', target='{target}'.")
-        or_split = re.compile(r"\s+(?i:OR)\s+")
-        parts = or_split.split(query.strip())
-        ast = []
-        for p in parts:
-            tokens = p.split()
-            if tokens:
-                ast.append(tokens)
+        ast = parse_query(query)
 
         if target.lower() == "sections":
             matched_secs = []
@@ -1556,8 +1809,12 @@ class FlexView:
     def _match_container_token(self, token: str, container) -> bool:
         """
         Match a single token against container metadata.
-        Handles tags (#tag), parameter expressions, and ID matching.
+        Handles tags (#tag), parameter expressions, OR groups, and ID matching.
         """
+        # OR group — (#a | #b | #c)
+        if token.startswith("(") and token.endswith(")"):
+            return match_group(token, container.tags)
+
         neg = False
         if token.startswith("!"):
             neg = True
@@ -1630,6 +1887,10 @@ class FlexView:
         return (not matched) if neg else matched
 
     def _match_token_core(self, token: str, sec: Section) -> bool:
+        # OR group — (#a | #b | #c)
+        if token.startswith("(") and token.endswith(")"):
+            return match_group(token, sec.tags)
+
         # Legacy @ prefix - convert to # for matching
         if token.startswith("@"):
             token = "#" + token[1:]
@@ -1682,6 +1943,7 @@ class FlexTag:
         dir: str | list[str] | None = None,
         filter_query: str | None = None,
         validate: bool = True,
+        strict: bool = False,
         settings: FlexTagSettings | None = None,
         recursive: bool = True,
     ) -> FlexView:
@@ -1691,8 +1953,8 @@ class FlexTag:
         for src in sources:
             src_path = src if os.path.isfile(src) else "<string>"
             c = inst._parse_source(src, src_path)
-            if validate:
-                c.validate_schema()
+            if validate or strict:
+                c.validate_schema(strict=strict)
             containers.append(c)
         view = FlexView(containers)
         if filter_query:
@@ -1765,6 +2027,7 @@ class FlexTag:
                 all_lines=lines,
                 source_name=source_name,
             )
+            s_obj.schema_defs = rs.get("schema_defs", [])
             sections.append(s_obj)
 
         container = Container(sections, source_name)

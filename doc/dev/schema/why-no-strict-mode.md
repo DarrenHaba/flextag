@@ -1,18 +1,24 @@
-# Why No Strict Mode
+# Strict Mode
 
-## The Question
+## Two Approaches
 
-"What if we want to reject sections that don't match any schema?"
+FlexTag supports both relaxed and strict validation:
 
-## The Answer
+```python
+// Default — unmatched sections pass through
+view = flextag.load(path="config.ft", validate=True)
 
-You don't need to. Filtering handles it.
+// Strict — every section must match at least one schema
+view = flextag.load(path="symbols.ft", validate=True, strict=True)
+```
 
-## Example
+## When to Use `strict=False` (Default)
+
+For files with mixed content — config, notes, scratch data, work-in-progress:
 
 ```flextag
 // Schema: adapters must have name and type
-[[#adapter*]]: ftml-schema
+[[#adapter.**]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
@@ -20,19 +26,11 @@ adapter_type: str
 // Valid adapter
 [[yahoo #adapter.ohlcv name="Yahoo Finance" adapter_type="ohlcv"]]: ftml
 description = "Free US equity data"
-coverage = ["US equities", "ETFs", "indices"]
 [[/]]
 
-// Another valid adapter
-[[polygon #adapter.ohlcv name="Polygon.io" adapter_type="ohlcv"]]: ftml
-description = "Real-time and historical market data"
-coverage = ["US equities", "options", "crypto"]
-[[/]]
-
-// Random notes — no schema matches
+// Random notes — no schema matches, no validation, totally fine
 [[#notes]]: text
 Remember to add more adapters later.
-This is just a reminder for myself.
 [[/]]
 
 // Scratch data — no schema matches
@@ -42,45 +40,45 @@ test_mode: true
 [[/]]
 ```
 
-## Querying
-
 ```python
-// Get all adapters
-view.filter("#adapter*")
-// Returns: yahoo, polygon
-// Notes and temp-config are not in results
-
-// Get OHLCV adapters
-view.filter("#adapter.ohlcv*")
-// Returns: yahoo, polygon
-
-// Get all sections (no filter)
-view.sections
-// Returns: all sections including notes and temp-config
+view.filter("#adapter.**")
+// Returns: yahoo only. Notes and temp-config are invisible.
 ```
 
-## The Point
+The notes and scratch data exist in the file, but they're invisible to queries that don't ask for them. No strict mode needed.
 
-The notes and scratch data exist in the file, but they're invisible to queries that don't ask for them.
+## When to Use `strict=True`
 
-**Strict mode would:**
-- Reject the file because `[[#notes]]` doesn't match a schema
-- Force you to define schemas for everything, even throwaway notes
-- Remove flexibility for no practical benefit
+For structured data files where every section must be validated:
 
-**Without strict mode:**
-- Valid adapters are validated
-- Everything else is allowed but unvalidated
-- Queries return exactly what you ask for
+```flextag
+// Every symbol child must have an exchange tag
+[[#symbol.* (#nyse | #nasdaq | #arca | #bats | #amex | #otc)]]: schema
+[[/]]
 
-## Real World
+// Every symbol child must have these fields
+[[#symbol.*]]: ftml-schema
+name: str
+type: str
+list_date: str
+[[/]]
 
-Developers put random stuff in files:
-- Notes and TODOs
-- Temporary test data
-- Work-in-progress sections
-- Commented-out alternatives
+// 13,000 symbol sections...
+[[#symbol.aapl #nasdaq name="Apple Inc." type="CS" list_date="1980-12-12"]]: ftml
+sic_description = "ELECTRONIC COMPUTERS"
+[[/]]
+```
 
-This is normal. This is how real projects work. Strict mode fights against this reality instead of embracing it.
+```python
+// Catches any malformed section on load
+view = flextag.load(path="symbols.ft", validate=True, strict=True)
+```
 
-FlexTag's design — tags + filtering — already handles the "junk" problem. You don't need strict mode to police the file. You just query what you want.
+A symbol missing its exchange tag or `name` field raises `SchemaValidationError` immediately.
+
+## What Gets Skipped
+
+Strict mode skips these section types — they don't need to match a schema:
+- `ftml-schema` — schema definitions themselves
+- `schema` — metadata-only schema definitions
+- `file-metadata` — file-level metadata

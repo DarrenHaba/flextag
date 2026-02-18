@@ -87,17 +87,18 @@ size = "M"
 [[/]]
 ```
 
-**Three Search Modifiers**
+**Glob-Style Wildcards**
 
-| Modifier | Scope | Example |
-|----------|-------|---------|
+| Pattern | Scope | Example |
+|---------|-------|---------|
 | `#tag` | Exact match | `#product.electronics` → keyboard only |
-| `#tag*` | All descendants | `#product*` → keyboard, cable, t-shirt |
-| `#tag+` | Immediate children | `#product+` → electronics, clothing |
+| `#tag.*` | Direct children | `#product.*` → electronics, clothing |
+| `#tag.**` | All descendants | `#product.**` → keyboard, cable, t-shirt |
+| `#pro*` | Name completion | `#pro*` → product, promo, project |
 ```python
-view.filter("#product*")                # everything
-view.filter("#product+")                # top-level categories only
-view.filter("#product.electronics*")    # keyboard + cable
+view.filter("#product.**")             # everything under product
+view.filter("#product.*")              # top-level categories only
+view.filter("#product.electronics.*")  # keyboard + cable
 ```
 
 Start broad, drill down. The hierarchy you design IS your navigation structure.
@@ -108,8 +109,8 @@ Start broad, drill down. The hierarchy you design IS your navigation structure.
 
 FlexTag validates data using the same tag-matching system. Schemas are sections too:
 ```flextag
-// Schema validates any section tagged #product or descendants
-[[#product*]]: ftml-schema
+// Schema validates any section under #product
+[[#product.**]]: ftml-schema
 name: str
 price: float<min=0.01>
 [[/]]
@@ -133,7 +134,7 @@ view = flextag.load(path="products.ft", validate=True)
 **Key Points:**
 
 * Schema uses `:` for type declarations, data uses `=` for values
-* Schema `#product*` matches all sections tagged `#product` or deeper
+* Schema `#product.**` matches all sections under `#product` at any depth
 * Extra fields like `description` and `size` are allowed - schemas only enforce what they declare
 * Constraints work just like FTML: `price: float<min=0.01, max=99999.99>`
 
@@ -142,13 +143,13 @@ view = flextag.load(path="products.ft", validate=True)
 Multiple schemas can apply to the same section through tag matching:
 ```flextag
 // Base schema for all products
-[[#product*]]: ftml-schema
+[[#product.**]]: ftml-schema
 name: str
 price: float
 [[/]]
 
 // Additional requirements for electronics
-[[#product.electronics*]]: ftml-schema
+[[#product.electronics.**]]: ftml-schema
 warranty: str
 sku: str
 [[/]]
@@ -247,7 +248,7 @@ configs = view.filter("#config")
 backends = view.filter("#compute")
 ```
 
-Same hashtags. Same modifiers (`*`, `+`). Same search logic.  
+Same hashtags. Same wildcards (`*`, `.*`, `.**`). Same search logic.  
 Section filtering and file filtering use identical syntax.
 
 ---
@@ -269,8 +270,8 @@ status = "draft"
 [[/]]
 ```
 ```python
-drafts = view.filter("#doc* status=draft")
-reports = view.filter("#doc.report*")
+drafts = view.filter("#doc.** status=draft")
+reports = view.filter("#doc.report.**")
 ```
 
 Organize any existing files - PDFs, images, CSVs, whatever - through tagging and metadata, without moving or converting anything.

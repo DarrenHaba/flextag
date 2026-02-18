@@ -11,37 +11,17 @@ FlexTag schema does not do this. There's no:
 
 FlexTag is about filtering and composition, not rigid document structure.
 
-## Not Strict Mode
+## Not Strict by Default
 
-There is no strict mode. Sections that don't match any schema are allowed.
+By default, sections that don't match any schema are allowed. Filtering makes it irrelevant — unmatched sections are invisible to queries that don't ask for them.
 
-**Why?** Because filtering makes it irrelevant.
+For structured data files where every section must be validated, use `strict=True`:
 
-```flextag
-[[#adapter #ohlcv]]: ftml-schema
-name: str
-adapter_type: str
-[[/]]
-
-[[alpaca #adapter #ohlcv name="Alpaca" adapter_type="ohlcv"]]: ftml
-description = "Commission-free trading API"
-[[/]]
-
-[[#notes]]: text
-TODO: remember to fix that thing
-[[/]]
-
-[[#scratch]]: yaml
-foo: bar
-temp: 123
-[[/]]
+```python
+view = flextag.load(path="symbols.ft", validate=True, strict=True)
 ```
 
-When you query `#adapter`, you get alpaca. The notes and scratch data don't exist to that query. They're filtered out.
-
-**Unmatched sections don't pollute your results. They're invisible to queries that don't ask for them.**
-
-This is the beauty of FlexTag. Strict mode would restrict flexibility for no real benefit. The "junk" in a file is someone's notes, temporary data, or work-in-progress. It doesn't interfere with anything.
+See `why-no-strict-mode.md` for details on when to use each approach.
 
 ## Not JSON Schema
 

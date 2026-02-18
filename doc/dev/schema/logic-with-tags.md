@@ -1,6 +1,6 @@
 # Logic with Tags
 
-Schema matching uses tags to express logical conditions. There's no special syntax for AND, OR, IF-THEN — the tag system itself is the logic.
+Schema matching uses tags to express logical conditions. There's no special syntax for AND, NOT, IF-THEN — the tag system itself is the logic. OR uses `|` with `()` grouping.
 
 ## Exact Match (Default)
 
@@ -14,7 +14,7 @@ name: str
 
 This checks for **presence**, not exclusivity. A section with `#adapter #ohlcv #live` still matches — it has `#adapter`. A section with only `#adapter.ohlcv` does not — that's a different tag. Extra tags on the section are fine; the schema only cares that its required tags are present.
 
-Use `*` or `+` to match descendants (see [what-schema-is.md](what-schema-is.md) for details).
+Use `.*` or `.**` to match children or descendants (see [what-schema-is.md](what-schema-is.md) for details).
 
 ## AND
 
@@ -31,24 +31,23 @@ Section must have `#adapter` AND `#ohlcv` to match. Each tag is still an exact m
 
 ## OR
 
-Create separate schemas:
+Use `|` with `()` grouping in a single schema:
 
 ```flextag
-[[#adapter #ohlcv]]: ftml-schema
-name: str
-provides: [str]
-[[/]]
-
-[[#adapter #news]]: ftml-schema
+// Section must have #adapter AND one of (#ohlcv | #news)
+[[#adapter (#ohlcv | #news)]]: ftml-schema
 name: str
 provides: [str]
 [[/]]
 ```
 
-A section with `#adapter #ohlcv` matches the first.
-A section with `#adapter #news` matches the second.
+A section with `#adapter #ohlcv` matches. A section with `#adapter #news` also matches. A section with `#adapter #websocket` does not.
 
-OR is expressed by having multiple schemas with different tag requirements.
+In filter queries, `|` works as a top-level OR:
+
+```python
+view.filter("#ohlcv | #news")    // sections with either tag
+```
 
 ## IF-THEN (Conditional Layering)
 
@@ -56,7 +55,7 @@ IF-THEN comes from layering multiple schemas — a base schema plus more specifi
 
 ```flextag
 // All adapters must have connection_timeout
-[[#adapter*]]: ftml-schema
+[[#adapter.**]]: ftml-schema
 connection_timeout: int
 [[/]]
 
@@ -106,11 +105,11 @@ rate_limit: int
 
 A section with `#adapter` matches. A section with `#adapter #deprecated` does not — the `!#deprecated` excludes it.
 
-Negation works with modifiers too:
+Negation works with wildcards too:
 
 ```flextag
-// Applies to all adapter descendants that are NOT in the legacy hierarchy
-[[#adapter* !#adapter.legacy*]]: ftml-schema
+// Applies to all adapter descendants that are NOT discontinued
+[[#adapter.** !#discontinued]]: ftml-schema
 api_version: str
 [[/]]
 ```
@@ -120,7 +119,7 @@ api_version: str
 | Logic                  | How to Express                                       |
 |------------------------|------------------------------------------------------|
 | a AND b                | `[[#a #b]]: ftml-schema`                             |
-| a OR b                 | Two schemas: `[[#a]]` and `[[#b]]`                   |
+| a OR b                 | `[[#a (#x \| #y)]]: ftml-schema` or `view.filter("#a \| #b")` |
 | a AND NOT b            | `[[#a !#b]]: ftml-schema`                            |
 | IF a THEN require X    | Base `[[#a]]` + specific `[[#a #b]]` schemas layered |
 | Base + optional extras | Layered schemas with increasing specificity          |

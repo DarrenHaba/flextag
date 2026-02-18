@@ -6,7 +6,7 @@ When designing from scratch, prefix schema-related tags with `#schema.`:
 
 ```flextag
 // Schema definition
-[[#schema.product*]]: ftml-schema
+[[#schema.product.**]]: ftml-schema
 name: str
 price: float
 [[/]]
@@ -27,13 +27,13 @@ It makes discovery trivial. Load your FlexTag files and query:
 
 ```python
 // Find all schema definitions
-.filter("#schema* :ftml-schema")
+.filter("#schema.** :ftml-schema")
 
 // Find all data that uses schemas
-.filter("#schema* :ftml")
+.filter("#schema.** :ftml")
 
 // Find everything schema-related (definitions + data)
-.filter("#schema*")
+.filter("#schema.**")
 ```
 
 ## Drilling Down
@@ -42,12 +42,12 @@ The nested tag structure lets you explore hierarchically:
 
 ```python
 // All top-level schema categories
-.filter("#schema+")
+.filter("#schema.*")
 // Returns: #schema.product, #schema.adapter, #schema.settings, etc.
 
 // All product-related sections
-.filter("#schema.product*")
-// Returns: sections with #schema.product, #schema.product.laptop, etc.
+.filter("#schema.product.**")
+// Returns: sections with #schema.product.laptop, etc.
 
 // Just laptop data
 .filter("#schema.product.laptop :ftml")

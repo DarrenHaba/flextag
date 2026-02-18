@@ -27,9 +27,9 @@ Two paths to the same section:
 - Discovering what schemas exist
 
 ```python
-.filter("#schema*")                  // everything with schemas
-.filter("#schema.product*")          // all product schemas and data
-.filter("#schema* :ftml-schema")     // just schema definitions
+.filter("#schema.**")                // everything with schemas
+.filter("#schema.product.**")        // all product schemas and data
+.filter("#schema.** :ftml-schema")   // just schema definitions
 ```
 
 **Data path** is for:
@@ -38,8 +38,8 @@ Two paths to the same section:
 - Domain-specific organization
 
 ```python
-.filter("#product.laptop")           // all laptops
-.filter("#product*")                 // all products
+.filter("#product.laptop")             // all laptops
+.filter("#product.**")                 // all products
 .filter("#product.laptop price>=2000") // expensive laptops
 ```
 
@@ -59,12 +59,12 @@ Two paths to the same section:
 
 ```flextag
 // Schemas
-[[#schema.adapter*]]: ftml-schema
+[[#schema.adapter.**]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
 
-[[#schema.adapter.ohlcv*]]: ftml-schema
+[[#schema.adapter.ohlcv.**]]: ftml-schema
 provides: [str]
 supports_live: bool
 [[/]]
@@ -92,11 +92,11 @@ rate_limit = {
 Queries:
 ```python
 // Via schema path
-.filter("#schema.adapter*")              // all adapters with schema validation
+.filter("#schema.adapter.**")             // all adapters with schema validation
 
 // Via data path
-.filter("#adapter.yahoo")                // just Yahoo adapter
-.filter("#adapter* supports_live=true")  // all live adapters
+.filter("#adapter.yahoo")                 // just Yahoo adapter
+.filter("#adapter.** supports_live=true") // all live adapters
 
 // Both work for the same data
 ```
