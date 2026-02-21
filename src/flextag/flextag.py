@@ -39,13 +39,13 @@ class FlexTagSyntaxError(FlexTagError):
         message: str,
         line_num: int = -1,
         column_num: int = -1,
-        source_name: str = "",
+        source_path: str = "",
         line_content: str = "",
     ):
         # Format message with location info
         loc_info = []
-        if source_name:
-            loc_info.append(source_name)
+        if source_path:
+            loc_info.append(source_path)
         if line_num > 0:
             loc_info.append(f"L{line_num}")
         if column_num > 0:
@@ -64,7 +64,7 @@ class FlexTagSyntaxError(FlexTagError):
         super().__init__(msg)
         self.line_num = line_num
         self.column_num = column_num
-        self.source_name = source_name
+        self.source_path = source_path
         self.line_content = line_content
 
 
@@ -220,8 +220,8 @@ def parse_query(query: str) -> list[list[str]]:
         "#draft | #final"
             → [["#draft"], ["#final"]]
 
-        "#symbol.* (#nyse | #nasdaq)"
-            → [["#symbol.*", "(#nyse | #nasdaq)"]]
+        "#adapter (#ohlcv | #news)"
+            → [["#adapter", "(#ohlcv | #news)"]]
 
         "#a #b | #c #d"
             → [["#a", "#b"], ["#c", "#d"]]
@@ -302,20 +302,8 @@ def match_tag(pattern: str, tags: list[str]) -> bool:
     """
     Match a single tag pattern against a list of tags.
 
-    Glob-style syntax with dot-separated hierarchy:
-
-      #tag        exact match
-      #fo*        character wildcard — tag name starts with "fo"
-      #tag.*      hierarchy one level — direct children of #tag
-      #tag.**     hierarchy any depth — all descendants of #tag
-      #tag.fo*    combined — children of #tag starting with "fo"
-
-    The dot is the hierarchy separator. The wildcard ``*`` operates
-    on characters when inline (``#fo*``) and on hierarchy segments
-    when it appears as a standalone segment after a dot (``.*`` / ``.**``).
-
-    Matching is case-insensitive — tags can be authored in any case
-    and queries will match regardless.
+    Exact match only (case-insensitive). Tags can be authored in any
+    case and queries will match regardless.
 
     This is the shared matching logic used by both schema matching
     and filter queries.
@@ -335,57 +323,17 @@ def _match_pattern(pat: str, tag: str) -> bool:
     """
     Core pattern matching — both strings already lowercase, no # prefix.
 
-    Handles three cases based on the pattern structure:
-      1. Ends with ``.**`` — hierarchy any depth (all descendants)
-      2. Ends with ``.*``  — hierarchy one level (direct children)
-      3. Contains ``*``    — character wildcard (prefix match)
-      4. No wildcard       — exact match
+    Exact match only.
     """
-    # Case 1: hierarchy any depth — #foo.**
-    if pat.endswith(".**"):
-        prefix = pat[:-3]  # strip ".**"
-        return tag.startswith(prefix + ".")
-
-    # Case 2: hierarchy one level — #foo.*
-    if pat.endswith(".*"):
-        prefix = pat[:-2]  # strip ".*"
-        if not tag.startswith(prefix + "."):
-            return False
-        remainder = tag[len(prefix) + 1:]
-        return "." not in remainder
-
-    # Case 3: character wildcard anywhere in pattern
-    if "*" in pat:
-        # Split pattern on dots to handle combined patterns like #exchange.na*
-        pat_segments = pat.split(".")
-        tag_segments = tag.split(".")
-
-        # Must have same number of segments
-        if len(pat_segments) != len(tag_segments):
-            return False
-
-        # Each segment must match
-        for p_seg, t_seg in zip(pat_segments, tag_segments, strict=True):
-            if "*" in p_seg:
-                # Character wildcard — prefix match within this segment
-                prefix = p_seg.rstrip("*")
-                if not t_seg.startswith(prefix):
-                    return False
-            else:
-                # Exact segment match
-                if p_seg != t_seg:
-                    return False
-        return True
-
-    # Case 4: exact match (no wildcard)
+    # Exact match
     return pat == tag
 
 
-def format_error_location(source_name, line_num, column_num):
+def format_error_location(source_path, line_num, column_num):
     """Create standardized location string for errors."""
     parts = []
-    if source_name:
-        parts.append(source_name)
+    if source_path:
+        parts.append(source_path)
     if line_num > 0:
         parts.append(f"L{line_num}")
     if column_num > 0:
@@ -404,7 +352,7 @@ def add_error_pointer(line_content, column_num):
 def _collect_multiline_bracket_block(
     lines: list[str],
     start_index: int,
-    source_name: str,
+    source_path: str,
     open_seq: str = "[[",
     close_seq: str = "]]",
 ) -> (str, int):
@@ -420,7 +368,7 @@ def _collect_multiline_bracket_block(
 
     :param lines: All lines of the file/string.
     :param start_index: Where we found the first line containing the open_seq.
-    :param source_name: For error messages
+    :param source_path: For error messages
     :param open_seq: By default '[['
     :param close_seq: By default ']]'
     :return: (bracket_text, next_index)
@@ -438,7 +386,7 @@ def _collect_multiline_bracket_block(
             f"Expected '{open_seq}' at line {i+1} but not found.",
             line_num=i + 1,
             column_num=1,  # Start of line
-            source_name=source_name,
+            source_path=source_path,
             line_content=line,
         )
 
@@ -457,7 +405,7 @@ def _collect_multiline_bracket_block(
                 "Multiple type declarations",
                 line_num=i + 1,
                 column_num=trailing_col,
-                source_name=source_name,
+                source_path=source_path,
                 line_content=line,
             )
         bracket_text = line[start_pos:end_pos].strip()
@@ -484,7 +432,7 @@ def _collect_multiline_bracket_block(
             raise FlexTagSyntaxError(
                 f"Missing closing '{close_seq}' for bracket block.",
                 line_num=len(lines),
-                source_name=source_name,
+                source_path=source_path,
             )
 
         # Join all lines, then extract the text between first open_seq and final close_seq
@@ -497,7 +445,7 @@ def _collect_multiline_bracket_block(
             raise FlexTagSyntaxError(
                 "Multiple type declarations",
                 line_num=close_line_index + 1,
-                source_name=source_name,
+                source_path=source_path,
             )
         bracket_text = bracket_full[start_pos_2:end_pos_2].strip()
         return bracket_text, i
@@ -569,7 +517,7 @@ def compare_op(lhs: Any, rhs: Any, op: str) -> bool:
 
 
 def _interpret_bracket_meta(
-    bracket_str: str, line_num: int = -1, source_name: str = "", original_line: str = ""
+    bracket_str: str, line_num: int = -1, source_path: str = "", original_line: str = ""
 ):
     """
     A standard bracket-metadata parser using shlex.
@@ -640,8 +588,6 @@ def _interpret_bracket_meta(
             tokens = tokens[1:]
         elif (
             not first.startswith("#")
-            and not first.startswith("@")
-            and not first.startswith(".")
             and "=" not in first
         ):
             section_id = first
@@ -654,16 +600,6 @@ def _interpret_bracket_meta(
             tags.append(t)
         elif t.startswith("#") or t.startswith("!#"):
             tags.append(t)
-        elif t.startswith("@"):
-            # Legacy @ prefix - convert to #tag
-            tags.append("#" + t[1:])
-        elif t.startswith("."):
-            # Deprecated path syntax - convert to #tag
-            logger.warning(
-                f"Deprecated path syntax '.{t[1:]}' used. "
-                f"Please use '#{t[1:]}' instead."
-            )
-            tags.append("#" + t[1:])
         elif "=" in t:
             k, v = t.split("=", 1)
             params[k.strip()] = parse_basic_value(v)
@@ -703,7 +639,7 @@ def _parse_defaults_block(defaults_section) -> (str, list, dict):
             bracket_str, new_i = _collect_multiline_bracket_block(
                 content_lines,
                 i,
-                defaults_section.source_name,
+                defaults_section.source_path,
                 open_seq="[",
                 close_seq="]",
             )
@@ -721,7 +657,7 @@ def _parse_defaults_block(defaults_section) -> (str, list, dict):
     d_id, tags, params, _ = _interpret_bracket_meta(
         bracket_str,
         line_num=i,  # Use the index we saved
-        source_name=defaults_section.source_name,
+        source_path=defaults_section.source_path,
         original_line=original_line,  # Use the saved original line
     )
     return d_id, tags, params
@@ -737,17 +673,16 @@ class PropertySchema:
     Defines validation rules for sections matching specific tags.
 
     Schema tags use the SAME syntax as filter queries:
-      #tag     = exact match (default)
-      #fo*     = character wildcard (name starts with "fo")
-      #tag.*   = hierarchy one level (direct children)
-      #tag.**  = hierarchy any depth (all descendants)
+      #tag     = exact match (case-insensitive)
       !#tag    = negation (must NOT have tag)
+      (#a | #b) = OR group (at least one must match)
+
+    Tag matching searches both standalone tags AND tag-typed parameter
+    values (parameter values prefixed with ``#``).
 
     Examples:
-        [[#adapter]]: ftml-schema            — matches only sections with exactly #adapter
-        [[#adapter.**]]: ftml-schema         — matches #adapter.live, #adapter.live.binance, etc.
-        [[#adapter.*]]: ftml-schema          — matches #adapter.live, #adapter.historical (one level)
-        [[#adapter #live]]: ftml-schema      — matches sections with BOTH exact #adapter AND exact #live
+        [[#adapter]]: ftml-schema            — matches sections with #adapter tag
+        [[#adapter #live]]: ftml-schema      — matches sections with BOTH #adapter AND #live
         [[#adapter !#deprecated]]: ftml-schema — matches sections with #adapter but NOT #deprecated
 
     TWO SEPARATE VALIDATIONS occur:
@@ -763,7 +698,7 @@ class PropertySchema:
         source_section: "Section",
         schema_type: str = "ftml-schema",
     ):
-        self.tags = tags  # e.g., ["#adapter.**", "#live"]
+        self.tags = tags  # e.g., ["#adapter", "#live"]
         self.property_definitions = property_definitions  # FTML schema content
         self.source_section = source_section
         self.schema_type = schema_type  # "ftml-schema" or "schema"
@@ -776,21 +711,27 @@ class PropertySchema:
         Check if this schema applies to the given section.
 
         Uses the same tag matching syntax as filter queries:
-          #tag     = exact match (default)
-          #fo*     = character wildcard (name starts with "fo")
-          #tag.*   = hierarchy one level (direct children)
-          #tag.**  = hierarchy any depth (all descendants)
+          #tag     = exact match (case-insensitive)
           !#tag    = negation (must NOT have tag)
           (#a | #b) = OR group (at least one must match)
 
+        Tag matching searches both standalone tags AND tag-typed
+        parameter values (values prefixed with ``#``).
+
         ALL schema tags must match (AND logic). Each tag is matched
-        independently against the section's tags. Parenthesized
-        groups are evaluated as OR — at least one alternative must match.
+        independently against the section's tags and parameter values.
+        Parenthesized groups are evaluated as OR.
         """
+        # Collect all searchable tags: standalone + tag-typed param values
+        all_tags = section.tags + [
+            v for v in section.parameters.values()
+            if isinstance(v, str) and v.startswith("#")
+        ]
+
         for schema_tag in self.tags:
             # OR group — (#a | #b | #c)
             if schema_tag.startswith("(") and schema_tag.endswith(")"):
-                if not match_group(schema_tag, section.tags):
+                if not match_group(schema_tag, all_tags):
                     return False
                 continue
 
@@ -799,7 +740,7 @@ class PropertySchema:
             if tag.startswith("!"):
                 neg = True
                 tag = tag[1:].strip()
-            matched = match_tag(tag, section.tags)
+            matched = match_tag(tag, all_tags)
             if neg:
                 matched = not matched
             if not matched:
@@ -1038,7 +979,7 @@ class FlexParser:
         pass
 
     def parse_bracket_sections(
-        self, lines: list[str], source_name: str
+        self, lines: list[str], source_path: str
     ) -> list[dict[str, Any]]:
         """
         Enhanced version that correctly handles 'file-metadata' sections and extracts their metadata.
@@ -1074,7 +1015,7 @@ class FlexParser:
                         "Multiple type declarations",
                         line_num=i + 1,
                         column_num=second_colon_pos + 1,
-                        source_name=source_name,
+                        source_path=source_path,
                         line_content=line,
                     )
 
@@ -1082,7 +1023,7 @@ class FlexParser:
                 bracket_str = m_open.group(1) or ""
                 type_decl = m_open.group(2) or ""
                 section_id, tags, params, is_self_closing, schema_defs = (
-                    self._interpret_open_bracket(bracket_str, source_name, i + 1)
+                    self._interpret_open_bracket(bracket_str, source_path, i + 1)
                 )
 
                 close_line = open_line
@@ -1107,7 +1048,7 @@ class FlexParser:
                         raise FlexTagSyntaxError(
                             "No matching close tag [[/]] found",
                             line_num=n,
-                            source_name=source_name,
+                            source_path=source_path,
                         )
 
                     raw_content = "".join(content_lines)
@@ -1134,7 +1075,7 @@ class FlexParser:
                         "Lines between sections must be comments starting with //",
                         line_num=i + 1,
                         column_num=1,
-                        source_name=source_name,
+                        source_path=source_path,
                         line_content=line,
                     )
                 i += 1
@@ -1144,7 +1085,7 @@ class FlexParser:
         }
 
     def _interpret_open_bracket(
-        self, bracket_str: str, source_name: str, line_num: int
+        self, bracket_str: str, source_path: str, line_num: int
     ):
         """
         Updated version that uses `shlex.split` to correctly handle
@@ -1166,7 +1107,7 @@ class FlexParser:
             raise FlexTagSyntaxError(
                 f"Error parsing bracket metadata: {e}",
                 line_num=line_num,
-                source_name=source_name,
+                source_path=source_path,
             ) from e
 
         # IDs are no longer used - sections are identified by tags/parameters
@@ -1182,9 +1123,6 @@ class FlexParser:
                 tags.append(t)
             elif t.startswith("#") or t.startswith("!#"):
                 tags.append(t)
-            elif t.startswith("@"):
-                # Legacy @ prefix - convert to #tag
-                tags.append("#" + t[1:])
             elif ":" in t and "<" in t and "=" not in t.split("<")[0]:
                 # Schema property definition with constraints: key:type<constraint>
                 # e.g., market_cap:int<min=0> or name:str<min_length=1>
@@ -1224,7 +1162,7 @@ class FlexParser:
                     f"Invalid token '{t}' in bracket. Use #tag for tags "
                     f"or key=value for parameters. Section IDs are no longer supported.",
                     line_num=line_num,
-                    source_name=source_name,
+                    source_path=source_path,
                 )
 
         return section_id, tags, params, is_self_closing, schema_defs
@@ -1232,7 +1170,7 @@ class FlexParser:
     def _convert_value_by_type(self, value_str: str, type_name: str):
         """
         Convert a string value to the specified type.
-        Supports: str, int, float, bool, null
+        Supports: str, int, float, bool, null, tag
         Falls back to parse_basic_value for unknown types.
         """
         value_str = value_str.strip()
@@ -1269,6 +1207,13 @@ class FlexParser:
                 raise FlexTagSyntaxError(
                     f"Boolean value must be 'true' or 'false', got '{value_str}'"
                 )
+        elif type_name == "tag":
+            # Tag type — ensure # prefix
+            if value_str.startswith('"') and value_str.endswith('"'):
+                value_str = value_str[1:-1]
+            if not value_str.startswith("#"):
+                value_str = "#" + value_str
+            return value_str
         elif type_name == "null":
             if value_str.lower() == "null":
                 return None
@@ -1303,7 +1248,7 @@ class Section:
         close_line: int,
         is_self_closing: bool,
         all_lines: list[str],
-        source_name: str = "",
+        source_path: str = "",
     ):
         self.raw_id = section_id
         self.raw_tags = tags[:]
@@ -1317,7 +1262,7 @@ class Section:
         self._all_lines = all_lines
         self._parsed_cache = None
 
-        self.source_name = source_name
+        self.source_path = source_path
         self.inherited_id: str | None = None
         self.inherited_tags: list[str] = []
         self.inherited_params: dict[str, Any] = {}
@@ -1474,9 +1419,9 @@ class Container:
     def __init__(
         self,
         sections: list[Section],
-        source_name: str,
+        source_path: str,
     ):
-        self.source_name = source_name
+        self.source_path = source_path
         self.raw_sections = sections[:]
         self.sections: list[Section] = []
         self.file_metadata: Section | None = None
@@ -1562,7 +1507,7 @@ class Container:
             sec = self.sections[0]
             raise SchemaValidationError(
                 f"Strict mode: section at line {sec.open_line} does not match any schema",
-                source_file=self.source_name,
+                source_file=self.source_path,
                 line_num=sec.open_line,
             )
         else:
@@ -1581,9 +1526,8 @@ class Container:
           schema      — validates header properties only (metadata-only)
 
         Schema tags use the same syntax as filter queries:
-          [[#adapter]]: ftml-schema    — exact match only
-          [[#adapter.**]]: ftml-schema — all descendants (any depth)
-          [[#adapter.*]]: ftml-schema  — direct children only (one level)
+          [[#adapter]]: ftml-schema    — exact match (case-insensitive)
+          [[#adapter !#deprecated]]: ftml-schema — with negation
         """
         self.property_schemas: list[PropertySchema] = []
 
@@ -1627,7 +1571,7 @@ class Container:
         """
         Validate sections against matching property schemas.
 
-        Schema tags use the same syntax as filter queries (#tag, #tag.*, #tag.**).
+        Schema tags use the same syntax as filter queries (#tag, !#tag, (#a | #b)).
         Multiple schemas can match one section — all are applied.
 
         If strict=True, every non-schema, non-file-metadata section must match
@@ -1639,7 +1583,7 @@ class Container:
                 sec = self.sections[0]
                 raise SchemaValidationError(
                     f"Strict mode: section at line {sec.open_line} does not match any schema",
-                    source_file=self.source_name,
+                    source_file=self.source_path,
                     line_num=sec.open_line,
                 )
             logger.debug("No property schemas present. Skipping validation.")
@@ -1658,7 +1602,7 @@ class Container:
             if strict and not matching_schemas:
                 raise SchemaValidationError(
                     f"Strict mode: section at line {section.open_line} does not match any schema",
-                    source_file=self.source_name,
+                    source_file=self.source_path,
                     line_num=section.open_line,
                 )
 
@@ -1668,7 +1612,7 @@ class Container:
                     error_msg = "\n".join(errors)
                     raise SchemaValidationError(
                         f"Schema validation errors for section at line {section.open_line}:\n{error_msg}",
-                        source_file=self.source_name,
+                        source_file=self.source_path,
                         line_num=section.open_line,
                     )
 
@@ -1754,7 +1698,9 @@ class FlexView:
 
             view.filter("#draft | #final")           # OR
             view.filter("#stock (#nyse | #nasdaq)")   # AND with OR group
-            view.filter("#stock #cap.mega")            # AND
+            view.filter("#stock #tech")                # AND
+            view.filter("exchange=")                   # key exists
+            view.filter('exchange=#nyse')              # key=value match
         """
         logger.debug(f"Filtering with query='{query}', target='{target}'.")
         ast = parse_query(query)
@@ -1768,7 +1714,7 @@ class FlexView:
             for c in self._containers:
                 sub_secs = [sec for sec in c.sections if sec in matched_secs]
                 if sub_secs:
-                    new_c = Container(sub_secs, c.source_name)
+                    new_c = Container(sub_secs, c.source_path)
                     # preserve file metadata and special sections
                     new_c.file_metadata = c.file_metadata
                     new_c.defaults = c.defaults
@@ -1806,6 +1752,56 @@ class FlexView:
             logger.warning(f"Unknown filter target={target}, ignoring filter")
             return self
 
+    def values(self, key: str) -> list:
+        """
+        Return unique values for a parameter key across all sections in this view.
+
+        Powers cascading dropdowns — filter first, then extract distinct values
+        for a specific parameter key.
+
+        Example::
+
+            view.values("exchange")                          # → ["#nyse", "#nasdaq"]
+            view.filter("exchange=#nyse").values("symbol")   # → ["#aapl", "#goog"]
+        """
+        seen = set()
+        result = []
+        for sec in self._user_sections:
+            params = sec.parameters
+            if key in params:
+                val = params[key]
+                hashable_val = val if isinstance(val, str | int | float | bool | type(None)) else str(val)
+                if hashable_val not in seen:
+                    seen.add(hashable_val)
+                    result.append(val)
+        return result
+
+    def tags(self) -> list[str]:
+        """
+        Return all unique tags across all sections in this view.
+
+        Includes both standalone tags (``#draft``, ``#featured``) and
+        tag-typed parameter values (``#nyse`` from ``exchange=#nyse``).
+
+        Powers autocomplete at the app layer — get all tags, then filter
+        client-side as the user types.
+        """
+        seen = set()
+        result = []
+        for sec in self._user_sections:
+            for tag in sec.tags:
+                tag_lower = tag.lower()
+                if tag_lower not in seen:
+                    seen.add(tag_lower)
+                    result.append(tag)
+            for val in sec.parameters.values():
+                if isinstance(val, str) and val.startswith("#"):
+                    val_lower = val.lower()
+                    if val_lower not in seen:
+                        seen.add(val_lower)
+                        result.append(val)
+        return result
+
     def _match_container_token(self, token: str, container) -> bool:
         """
         Match a single token against container metadata.
@@ -1813,7 +1809,11 @@ class FlexView:
         """
         # OR group — (#a | #b | #c)
         if token.startswith("(") and token.endswith(")"):
-            return match_group(token, container.tags)
+            all_tags = container.tags + [
+                v for v in container.parameters.values()
+                if isinstance(v, str) and v.startswith("#")
+            ]
+            return match_group(token, all_tags)
 
         neg = False
         if token.startswith("!"):
@@ -1822,13 +1822,20 @@ class FlexView:
 
         matched = False
 
-        # Legacy @ prefix - convert to # for matching
-        if token.startswith("@"):
-            token = "#" + token[1:]
-
-        # Handle tag match using shared match_tag logic
+        # Handle tag match — search standalone tags AND parameter tag values
         if token.startswith("#"):
             matched = match_tag(token, container.tags)
+            if not matched:
+                for val in container.parameters.values():
+                    if isinstance(val, str) and val.startswith("#"):
+                        if match_tag(token, [val]):
+                            matched = True
+                            break
+
+        # Key-exists check: "exchange=" (no value after =)
+        elif token.endswith("=") and not any(c in token[:-1] for c in "!<>"):
+            key = token[:-1].strip()
+            matched = key in container.parameters
 
         # Handle parameter expression (key=value, key>=value, etc.)
         elif OP_PATTERN.match(token):
@@ -1839,7 +1846,6 @@ class FlexView:
                 m.group(3).strip(),
             )
 
-            # Debug output
             logger.debug(
                 f"Parameter expression: key='{key}', op='{op}', rhs_str='{rhs_str}'"
             )
@@ -1889,19 +1895,27 @@ class FlexView:
     def _match_token_core(self, token: str, sec: Section) -> bool:
         # OR group — (#a | #b | #c)
         if token.startswith("(") and token.endswith(")"):
-            return match_group(token, sec.tags)
+            # Include tag-typed parameter values in OR group matching
+            all_tags = sec.tags + [
+                v for v in sec.parameters.values()
+                if isinstance(v, str) and v.startswith("#")
+            ]
+            return match_group(token, all_tags)
 
-        # Legacy @ prefix - convert to # for matching
-        if token.startswith("@"):
-            token = "#" + token[1:]
-
-        # Legacy . prefix - convert to # for matching
-        if token.startswith("."):
-            token = "#" + token[1:]
-
-        # Handle tag match using shared match_tag logic
+        # Handle tag match — search standalone tags AND parameter tag values
         if token.startswith("#"):
-            return match_tag(token, sec.tags)
+            if match_tag(token, sec.tags):
+                return True
+            for val in sec.parameters.values():
+                if isinstance(val, str) and val.startswith("#"):
+                    if match_tag(token, [val]):
+                        return True
+            return False
+
+        # Key-exists check: "exchange=" (no value after =)
+        if token.endswith("=") and not any(c in token[:-1] for c in "!<>"):
+            key = token[:-1].strip()
+            return key in sec.parameters
 
         # If param expression
         m = OP_PATTERN.match(token)
@@ -2002,7 +2016,7 @@ class FlexTag:
                     res.append(os.path.join(directory, fn))
         return res
 
-    def _parse_source(self, src: str, source_name: str) -> Container:
+    def _parse_source(self, src: str, source_path: str) -> Container:
         if os.path.exists(src) and os.path.isfile(src):
             logger.debug(f"Parsing file: {src}")
             with open(src, encoding="utf-8", errors="surrogateescape") as f:
@@ -2011,7 +2025,7 @@ class FlexTag:
             logger.debug("Parsing raw string input.")
             lines = src.splitlines(keepends=True)
 
-        parse_result = self._parser.parse_bracket_sections(lines, source_name)
+        parse_result = self._parser.parse_bracket_sections(lines, source_path)
         raw_secs = parse_result["sections"]
 
         sections = []
@@ -2025,12 +2039,12 @@ class FlexTag:
                 close_line=rs["close_line"],
                 is_self_closing=rs["is_self_closing"],
                 all_lines=lines,
-                source_name=source_name,
+                source_path=source_path,
             )
             s_obj.schema_defs = rs.get("schema_defs", [])
             sections.append(s_obj)
 
-        container = Container(sections, source_name)
+        container = Container(sections, source_path)
         return container
 
 

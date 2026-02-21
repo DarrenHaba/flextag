@@ -7,8 +7,8 @@ Documentation for the FlexTag schema system.
 - [what-schema-is.md](what-schema-is.md) — Core concept and how it works
 - [what-schema-is-not.md](what-schema-is-not.md) — What we explicitly don't do
 - [why-no-strict-mode.md](why-no-strict-mode.md) — When to use `strict=True` vs default relaxed validation
-- [naming-conventions.md](naming-conventions.md) — The `#schema.` prefix convention
-- [dual-tag-paths.md](dual-tag-paths.md) — Using schema and data tag hierarchies together
+- [naming-conventions.md](naming-conventions.md) — Tag conventions for schema discoverability
+- [dual-tag-paths.md](dual-tag-paths.md) — Using multiple tags and tagged parameters together
 - [logic-with-tags.md](logic-with-tags.md) — How to express AND, OR, IF-THEN with tags
 - [other-markup-languages.md](other-markup-languages.md) — Why we're not supporting JSON Schema (yet)
 
@@ -49,31 +49,25 @@ The section type describes **what's inside the section**.
 
 ## Tag Matching Syntax
 
-Schema tags use the **same glob-style wildcard syntax as filter queries**:
+Schema tags use **exact match** — no hierarchy, no wildcards. Tags are flat.
 
 | Syntax | Meaning |
 |--------|---------|
 | `#tag` | Exact match (default) |
-| `#tag.*` | Direct children (one level) |
-| `#tag.**` | All descendants (any depth) |
-| `#fo*` | Character wildcard (name starts with prefix) |
 | `!#tag` | Negation (must NOT have tag) |
 | `(#a \| #b)` | OR group (at least one must match) |
+| `key=#value` | Parameter with tagged value |
+| `key=` | Parameter key must exist |
 
 ```flextag
-// Exact — only validates sections tagged exactly #product
-[[#product]]: ftml-schema
+// Exact — only validates sections tagged exactly #adapter
+[[#adapter]]: ftml-schema
 name: str
 [[/]]
 
-// All descendants — validates #adapter.ohlcv, #adapter.ohlcv.yahoo, etc. (NOT #adapter itself)
-[[#adapter.**]]: ftml-schema
-name: str
-[[/]]
-
-// Direct children — validates #adapter.ohlcv, #adapter.news, but NOT #adapter.ohlcv.yahoo
-[[#adapter.*]]: ftml-schema
-adapter_type: str
+// With tagged parameter constraint
+[[#adapter type=#ohlcv]]: ftml-schema
+timeframes: [str]
 [[/]]
 ```
 
@@ -81,7 +75,7 @@ adapter_type: str
 
 **One sentence:** Schema defines required fields for sections with matching tags — `ftml-schema` validates header + body, `schema` validates header only.
 
-**Key insight:** Schema tags use the same `#tag`, `#tag.*`, `#tag.**` syntax as filter queries. Exact match by default.
+**Key insight:** Schema tags use exact match. Use multiple flat tags and tagged parameters for structured matching.
 
 **Not strict by default:** Unmatched sections are allowed. For structured data files, use `strict=True` to require every section to match at least one schema.
 
@@ -91,33 +85,34 @@ adapter_type: str
 
 ```flextag
 // Schema — all adapters must have name and adapter_type
-[[#adapter.**]]: ftml-schema
+[[#adapter]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
 
 // Schema — ohlcv adapters also need timeframes
-[[#adapter.ohlcv.**]]: ftml-schema
+[[#adapter type=#ohlcv]]: ftml-schema
 timeframes: [str]
 supports_live: bool
 [[/]]
 
-// Data — matches BOTH schemas (#adapter.** and #adapter.ohlcv.**)
-[[yahoo #adapter.ohlcv name="Yahoo Finance" adapter_type="ohlcv" timeframes=["1d","1wk"] supports_live=false]]: ftml
+// Data — matches BOTH schemas (#adapter and #adapter type=#ohlcv)
+[[#adapter type=#ohlcv source=#yahoo name="Yahoo Finance" adapter_type="ohlcv" timeframes=["1d","1wk"] supports_live=false]]: ftml
 description = "Free market data provider"
 coverage = ["US equities", "ETFs", "indices"]
 [[/]]
 
-// Data — matches only the first schema (#adapter.**)
-[[rss_feed #adapter.news name="RSS Feed" adapter_type="news"]]: ftml
+// Data — matches only the first schema (#adapter)
+[[#adapter type=#news source=#rss name="RSS Feed" adapter_type="news"]]: ftml
 description = "Generic RSS news feed adapter"
 [[/]]
 ```
 
 Query examples:
 ```python
-.filter("#adapter.**")            // all adapters
-.filter("#adapter.ohlcv.**")      // all OHLCV adapters
-.filter("supports_live=true")     // property filter
-.filter(":ftml-schema")           // all schema definitions
+.filter("#adapter")                   // all adapters
+.filter("type=#ohlcv")               // all OHLCV adapters
+.filter("supports_live=true")        // property filter
+.filter(":ftml-schema")              // all schema definitions
+.filter("#adapter").values("type")   // → ["#ohlcv", "#news"]
 ```

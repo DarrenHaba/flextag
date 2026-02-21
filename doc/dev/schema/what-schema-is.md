@@ -11,7 +11,7 @@ Schema defines required fields for sections with matching tags.
 Validates both header properties AND FTML body content:
 
 ```flextag
-[[#adapter.**]]: ftml-schema
+[[#adapter]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
@@ -29,11 +29,11 @@ Validates header properties only. Body content is ignored regardless of content 
 
 ```flextag
 // Only checks that matching sections have the right tags/params
-[[#symbol.* (#nyse | #nasdaq | #arca)]]: schema
+[[#symbol exchange=(#nyse | #nasdaq | #arca)]]: schema
 [[/]]
 
 // With property definitions — validates header params, ignores body
-[[#symbol.* name:str type:str]]: schema
+[[#symbol name:str type:str]]: schema
 [[/]]
 ```
 
@@ -43,7 +43,7 @@ Use `schema` when you want to enforce tag/parameter structure on sections that u
 
 **Schema section** — defines the contract:
 ```flextag
-[[#adapter.**]]: ftml-schema
+[[#adapter]]: ftml-schema
 name: str
 adapter_type: str
 [[/]]
@@ -51,7 +51,7 @@ adapter_type: str
 
 **Data section** — must follow the contract:
 ```flextag
-[[yahoo #adapter.ohlcv name="Yahoo Finance" adapter_type="ohlcv"]]: ftml
+[[#adapter type=#ohlcv name="Yahoo Finance" adapter_type="ohlcv"]]: ftml
 description = "Free US equity data via Yahoo Finance API"
 coverage = ["US equities", "ETFs"]
 [[/]]
@@ -66,16 +66,15 @@ The differences:
 
 ## Tag Matching Syntax
 
-Schema tags use the **same glob-style wildcard syntax as filter queries**:
+Schema tags use **exact match** — no hierarchy, no wildcards. Tags are flat.
 
 | Syntax | Meaning |
 |--------|---------|
 | `#tag` | Exact match (default) |
-| `#tag.*` | Direct children (one level) |
-| `#tag.**` | All descendants (any depth) |
-| `#fo*` | Character wildcard (name starts with prefix) |
 | `!#tag` | Negation (must NOT have tag) |
 | `(#a \| #b)` | OR group (at least one must match) |
+| `key=#value` | Parameter with tagged value |
+| `key=` | Parameter key must exist |
 
 ### Exact Match (default)
 
@@ -85,42 +84,31 @@ Schema tags use the **same glob-style wildcard syntax as filter queries**:
 name: str
 [[/]]
 
-[[yahoo #adapter name="Yahoo"]]: ftml
+[[#adapter name="Yahoo"]]: ftml
 description = "Matches — has exact #adapter tag"
 [[/]]
 
-[[yahoo #adapter.ohlcv name="Yahoo"]]: ftml
-description = "Does NOT match — #adapter.ohlcv is not #adapter"
+[[#ohlcv name="Yahoo"]]: ftml
+description = "Does NOT match — #ohlcv is not #adapter"
 [[/]]
 ```
 
-### All Descendants with `.**`
+### Tagged Parameter Matching
+
+Use tagged parameters to constrain which sections a schema applies to:
 
 ```flextag
-// Matches #adapter.ohlcv, #adapter.ohlcv.yahoo, etc. (NOT #adapter itself)
-[[#adapter.**]]: ftml-schema
-name: str
+// Matches any section with #adapter AND type=#ohlcv
+[[#adapter type=#ohlcv]]: ftml-schema
+timeframes: [str]
 [[/]]
 
-[[yahoo #adapter.ohlcv name="Yahoo"]]: ftml
-description = "Matches — #adapter.ohlcv is a descendant of #adapter"
-[[/]]
-```
-
-### Direct Children with `.*`
-
-```flextag
-// Matches #adapter.ohlcv, #adapter.news — but NOT #adapter itself or #adapter.ohlcv.yahoo
-[[#adapter.*]]: ftml-schema
-adapter_type: str
+[[#adapter type=#ohlcv name="Yahoo" timeframes=["1d","1wk"]]]: ftml
+description = "Matches — has #adapter AND type=#ohlcv"
 [[/]]
 
-[[yahoo #adapter.ohlcv adapter_type="ohlcv"]]: ftml
-description = "Matches — one level deep"
-[[/]]
-
-[[deep #adapter.ohlcv.yahoo adapter_type="ohlcv"]]: ftml
-description = "Does NOT match — two levels deep"
+[[#adapter type=#news name="RSS"]]: ftml
+description = "Does NOT match — type is #news, not #ohlcv"
 [[/]]
 ```
 
@@ -154,17 +142,17 @@ You can build up requirements through multiple schemas:
 
 ```flextag
 // Base — all adapters need name
-[[#adapter.**]]: ftml-schema
+[[#adapter]]: ftml-schema
 name: str
 [[/]]
 
 // OHLCV adapters also need timeframes
-[[#adapter.ohlcv.**]]: ftml-schema
+[[#adapter type=#ohlcv]]: ftml-schema
 timeframes: [str]
 [[/]]
 
-// A section tagged #adapter.ohlcv matches BOTH schemas
-[[yahoo #adapter.ohlcv name="Yahoo" timeframes=["1d","1wk"]]]: ftml
+// A section tagged #adapter with type=#ohlcv matches BOTH schemas
+[[#adapter type=#ohlcv name="Yahoo" timeframes=["1d","1wk"]]]: ftml
 description = "Must have name (from first schema) AND timeframes (from second schema)"
 [[/]]
 ```
@@ -174,7 +162,7 @@ description = "Must have name (from first schema) AND timeframes (from second sc
 You don't need `?` to mark optional fields. Tag presence IS the conditional logic.
 
 - No `#live` tag? Don't need `api_key` property.
-- No `#adapter.ohlcv` tag? Don't need `timeframes` property.
+- No `type=#ohlcv` parameter? Don't need `timeframes` property.
 
 The tag system handles optionality naturally.
 
@@ -183,7 +171,7 @@ The tag system handles optionality naturally.
 The header and body are validated separately against the same schema:
 
 ```flextag
-[[yahoo #adapter name="Yahoo Finance"]]: ftml
+[[#adapter name="Yahoo Finance"]]: ftml
 // Header: name="Yahoo Finance" — validated
 // Body below also validated when content type is ftml
 

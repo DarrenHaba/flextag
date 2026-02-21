@@ -137,65 +137,61 @@ Product description here
         self.assertEqual(data_sections[0].parameters["name"], "Widget")
         self.assertEqual(data_sections[0].parameters["price"], 9.99)
 
-    def test_descendant_match_with_double_star(self):
-        """Test that #tag.** in schema matches all descendant tags."""
+    def test_tag_match_in_schema(self):
+        """Test that schema with #tag matches sections with that tag."""
         data = """
-[[#schema.product.**]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#schema.product.laptop name="ThinkPad"]]: text
-Laptop matches because schema uses ** for descendants
+[[#product name="ThinkPad"]]: text
+Section with matching tag
 [[/]]
         """
         view = FlexTag.load(string=data, validate=True)
         data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
         self.assertEqual(len(data_sections), 1)
-        self.assertIn("#schema.product.laptop", data_sections[0].tags)
+        self.assertIn("#product", data_sections[0].tags)
 
-    def test_exact_match_does_not_match_descendants(self):
-        """Test that #tag (no modifier) does NOT match descendant tags."""
+    def test_exact_match_requires_exact_tag(self):
+        """Test that #tag only matches sections with exactly that tag."""
         data = """
-[[#schema.product]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#schema.product.laptop name="ThinkPad"]]: text
-Should NOT be validated — schema is exact match only
+[[#laptop name="ThinkPad"]]: text
+Different tag — schema does NOT apply
 [[/]]
 
-[[#schema.product.laptop]]: text
+[[#laptop]]: text
 Missing name — but no schema applies so this is fine
 [[/]]
         """
-        # Should not raise — the schema only matches exact #schema.product,
-        # not #schema.product.laptop
+        # Should not raise — the schema only matches #product, not #laptop
         view = FlexTag.load(string=data, validate=True)
         data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
         self.assertEqual(len(data_sections), 2)
 
-    def test_immediate_children_with_dot_star(self):
-        """Test that #tag.* matches immediate children only."""
+    def test_schema_with_tagged_parameters(self):
+        """Test that schema matches sections via tag-typed parameter values."""
         data = """
-[[#adapter.*]]: ftml-schema
+[[#adapter]]: ftml-schema
 name: str
+adapter_type: str
 [[/]]
 
-[[#adapter.live name="Binance"]]: text
-One level deep — matches
+[[#adapter name="Binance" adapter_type=#live]]: text
+Has adapter tag — matches
 [[/]]
 
-[[#adapter.live.binance name="Deep"]]: text
-Two levels deep — should NOT match the .* schema
-[[/]]
-
-[[#adapter.live.binance]]: text
-Two levels deep, no name — fine because schema doesn't apply
+[[#other name="Something"]]: text
+No adapter tag — does not match schema
 [[/]]
         """
         view = FlexTag.load(string=data, validate=True)
         data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
-        self.assertEqual(len(data_sections), 3)
+        self.assertEqual(len(data_sections), 2)
 
     def test_negation_with_bang(self):
         """Test that !#tag excludes sections with that tag from schema matching."""
@@ -314,27 +310,27 @@ class TestFlexTagFilter(unittest.TestCase):
     def test_complex_filter(self):
         """Test complex filtering."""
         data = """
-        [[#one #draft @research]]
+        [[#one #draft #research]]
         Draft research
         [[/]]
 
-        [[#two #draft @development]]
+        [[#two #draft #development]]
         Draft development
         [[/]]
 
-        [[#three #final @research]]
+        [[#three #final #research]]
         Final research
         [[/]]
         """
         view = FlexTag.load(string=data, validate=False)
 
-        # Filter by tag AND path
-        filtered = view.filter("#draft @research")
+        # Filter by tag AND tag
+        filtered = view.filter("#draft #research")
         self.assertEqual(len(filtered.sections), 1)
         self.assertIn("#one", filtered.sections[0].tags)
 
-        # Filter by tag OR path (legacy OR keyword)
-        filtered = view.filter("#final OR @development")
+        # Filter by tag OR tag (legacy OR keyword)
+        filtered = view.filter("#final OR #development")
         self.assertEqual(len(filtered.sections), 2)
         all_tags = []
         for s in filtered.sections:
@@ -342,8 +338,8 @@ class TestFlexTagFilter(unittest.TestCase):
         self.assertIn("#two", all_tags)
         self.assertIn("#three", all_tags)
 
-        # Filter by tag | path (pipe syntax)
-        filtered = view.filter("#final | @development")
+        # Filter by tag | tag (pipe syntax)
+        filtered = view.filter("#final | #development")
         self.assertEqual(len(filtered.sections), 2)
         all_tags = []
         for s in filtered.sections:
@@ -422,23 +418,23 @@ ARCA stock
     def test_group_or_in_schema(self):
         """Schema with () group validates correctly."""
         data = """
-[[#product.* (#electronics | #clothing)]]: ftml-schema
+[[#product (#electronics | #clothing)]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop #electronics name="ThinkPad"]]: text
+[[#product #electronics name="ThinkPad"]]: text
 Valid — has #electronics
 [[/]]
 
-[[#product.shirt #clothing name="T-Shirt"]]: text
+[[#product #clothing name="T-Shirt"]]: text
 Valid — has #clothing
 [[/]]
 
-[[#product.food #grocery name="Apple"]]: text
+[[#product #grocery name="Apple"]]: text
 No matching schema — #grocery not in group
 [[/]]
 
-[[#product.food #grocery]]: text
+[[#product #grocery]]: text
 No schema applies, no name required
 [[/]]
         """
@@ -449,11 +445,11 @@ No schema applies, no name required
     def test_schema_group_validation_failure(self):
         """Schema with () group rejects missing required field."""
         data = """
-[[#product.* (#electronics | #clothing)]]: ftml-schema
+[[#product (#electronics | #clothing)]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop #electronics]]: text
+[[#product #electronics]]: text
 Missing name — should fail validation
 [[/]]
         """
@@ -497,228 +493,196 @@ B
         self.assertEqual(len(result_pipe.sections), len(result_or.sections))
 
 
-class TestWildcardSyntax(unittest.TestCase):
-    """Tests for glob-style wildcard syntax: *, .*, .**"""
+class TestTaggedParameters(unittest.TestCase):
+    """Tests for tagged parameters — parameter values prefixed with # are searchable tags."""
 
     def setUp(self):
-        """Create a dataset with hierarchical tags for wildcard testing."""
+        """Create a dataset with tagged parameters."""
         self.data = """
-[[#exchange]]: text
-The exchange parent
+[[exchange=#nyse symbol=#aapl sector=#tech name="Apple Inc."]]: text
+Apple market data
 [[/]]
 
-[[#exchange.nasdaq]]: text
-NASDAQ exchange
+[[exchange=#nyse symbol=#goog sector=#tech name="Alphabet"]]: text
+Alphabet market data
 [[/]]
 
-[[#exchange.nyse]]: text
-NYSE exchange
+[[exchange=#nasdaq symbol=#msft sector=#tech name="Microsoft"]]: text
+Microsoft market data
 [[/]]
 
-[[#exchange.nasdaq.aapl]]: text
-AAPL under NASDAQ
+[[exchange=#nasdaq symbol=#amzn sector=#retail name="Amazon"]]: text
+Amazon market data
 [[/]]
 
-[[#exchange.nasdaq.msft]]: text
-MSFT under NASDAQ
-[[/]]
-
-[[#foo]]: text
-Foo
-[[/]]
-
-[[#foobar]]: text
-Foobar
-[[/]]
-
-[[#food]]: text
-Food
-[[/]]
-
-[[#for]]: text
-For
-[[/]]
-
-[[#four]]: text
-Four
+[[#featured exchange=#nyse symbol=#tsla sector=#auto name="Tesla"]]: text
+Tesla featured
 [[/]]
         """
         self.view = FlexTag.load(string=self.data, validate=False)
 
-    # ── Character wildcard: #fo* ──
+    def test_tag_search_finds_parameter_values(self):
+        """#aapl finds a section where aapl is a parameter tag value."""
+        result = self.view.filter("#aapl")
+        self.assertEqual(len(result.sections), 1)
+        self.assertEqual(result.sections[0].parameters["name"], "Apple Inc.")
 
-    def test_char_wildcard_matches_prefix(self):
-        """#fo* matches any tag starting with 'fo'."""
-        result = self.view.filter("#fo*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#foo", tags)
-        self.assertIn("#foobar", tags)
-        self.assertIn("#food", tags)
-        self.assertIn("#for", tags)
-        self.assertIn("#four", tags)
+    def test_tag_search_finds_multiple(self):
+        """#nyse finds all NYSE sections."""
+        result = self.view.filter("#nyse")
+        self.assertEqual(len(result.sections), 3)
 
-    def test_char_wildcard_does_not_cross_dots(self):
-        """#fo* should NOT match hierarchical tags like #foo.bar."""
-        result = self.view.filter("#fo*")
-        tags = [s.tags[0] for s in result.sections]
-        # Should not include #exchange.nasdaq.aapl etc.
-        for t in tags:
-            self.assertNotIn(".", t.lstrip("#"))
+    def test_tag_search_case_insensitive(self):
+        """#AAPL finds #aapl (case-insensitive)."""
+        result = self.view.filter("#AAPL")
+        self.assertEqual(len(result.sections), 1)
 
-    def test_char_wildcard_no_match(self):
-        """#zz* matches nothing."""
-        result = self.view.filter("#zz*")
+    def test_key_value_filter(self):
+        """exchange=#nyse matches explicitly."""
+        result = self.view.filter("exchange=#nyse")
+        self.assertEqual(len(result.sections), 3)
+
+    def test_key_exists_filter(self):
+        """exchange= matches any section with an exchange parameter."""
+        result = self.view.filter("exchange=")
+        self.assertEqual(len(result.sections), 5)
+
+    def test_key_exists_no_match(self):
+        """nonexistent= matches nothing."""
+        result = self.view.filter("nonexistent=")
         self.assertEqual(len(result.sections), 0)
 
-    def test_char_wildcard_exact_prefix(self):
-        """#exchange* matches #exchange only (not #exchange.nasdaq)."""
-        result = self.view.filter("#exchange*")
+    def test_and_filter_tags_and_params(self):
+        """#nyse sector=#tech matches NYSE tech sections."""
+        result = self.view.filter("#nyse sector=#tech")
+        self.assertEqual(len(result.sections), 2)
+
+    def test_or_filter(self):
+        """symbol=#aapl | symbol=#msft finds both."""
+        result = self.view.filter("symbol=#aapl | symbol=#msft")
+        self.assertEqual(len(result.sections), 2)
+
+    def test_standalone_tag_still_works(self):
+        """#featured finds sections with standalone #featured tag."""
+        result = self.view.filter("#featured")
         self.assertEqual(len(result.sections), 1)
-        self.assertIn("#exchange", result.sections[0].tags)
+        self.assertEqual(result.sections[0].parameters["symbol"], "#tsla")
 
-    def test_char_wildcard_case_insensitive(self):
-        """#FO* matches tags starting with 'fo' (case-insensitive)."""
-        result = self.view.filter("#FO*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#foo", tags)
-        self.assertIn("#food", tags)
+    def test_standalone_and_param_tag_together(self):
+        """#featured #nyse finds featured NYSE section."""
+        result = self.view.filter("#featured #nyse")
+        self.assertEqual(len(result.sections), 1)
 
-    # ── Hierarchy one level: #tag.* ──
+    def test_negation_with_param_tags(self):
+        """#tech !#nyse finds NASDAQ tech sections."""
+        result = self.view.filter("#tech !#nyse")
+        self.assertEqual(len(result.sections), 1)
+        self.assertEqual(result.sections[0].parameters["symbol"], "#msft")
 
-    def test_one_level_matches_direct_children(self):
-        """#exchange.* matches direct children only."""
-        result = self.view.filter("#exchange.*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#exchange.nasdaq", tags)
-        self.assertIn("#exchange.nyse", tags)
+    def test_or_group_with_param_tags(self):
+        """(#aapl | #msft) finds both via parameter values."""
+        result = self.view.filter("(#aapl | #msft)")
         self.assertEqual(len(result.sections), 2)
 
-    def test_one_level_excludes_self(self):
-        """#exchange.* does NOT match #exchange itself."""
-        result = self.view.filter("#exchange.*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertNotIn("#exchange", tags)
-
-    def test_one_level_excludes_grandchildren(self):
-        """#exchange.* does NOT match #exchange.nasdaq.aapl."""
-        result = self.view.filter("#exchange.*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertNotIn("#exchange.nasdaq.aapl", tags)
-        self.assertNotIn("#exchange.nasdaq.msft", tags)
-
-    def test_one_level_deeper(self):
-        """#exchange.nasdaq.* matches AAPL and MSFT."""
-        result = self.view.filter("#exchange.nasdaq.*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#exchange.nasdaq.aapl", tags)
-        self.assertIn("#exchange.nasdaq.msft", tags)
-        self.assertEqual(len(result.sections), 2)
-
-    # ── Hierarchy any depth: #tag.** ──
-
-    def test_any_depth_matches_all_descendants(self):
-        """#exchange.** matches everything under exchange."""
-        result = self.view.filter("#exchange.**")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#exchange.nasdaq", tags)
-        self.assertIn("#exchange.nyse", tags)
-        self.assertIn("#exchange.nasdaq.aapl", tags)
-        self.assertIn("#exchange.nasdaq.msft", tags)
-        self.assertEqual(len(result.sections), 4)
-
-    def test_any_depth_excludes_self(self):
-        """#exchange.** does NOT match #exchange itself."""
-        result = self.view.filter("#exchange.**")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertNotIn("#exchange", tags)
-
-    def test_any_depth_from_deeper(self):
-        """#exchange.nasdaq.** matches only AAPL and MSFT."""
-        result = self.view.filter("#exchange.nasdaq.**")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#exchange.nasdaq.aapl", tags)
-        self.assertIn("#exchange.nasdaq.msft", tags)
-        self.assertEqual(len(result.sections), 2)
-
-    # ── Combined: hierarchy + character wildcard ──
-
-    def test_combined_hierarchy_and_char(self):
-        """#exchange.na* matches children starting with 'na'."""
-        result = self.view.filter("#exchange.na*")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertIn("#exchange.nasdaq", tags)
-        self.assertNotIn("#exchange.nyse", tags)
-
-    def test_combined_hierarchy_and_char_no_match(self):
-        """#exchange.zz* matches nothing."""
-        result = self.view.filter("#exchange.zz*")
+    def test_string_param_not_searchable_as_tag(self):
+        """Non-tag string values are NOT found by #search."""
+        # "Apple Inc." is a plain string, not a tag
+        result = self.view.filter("#Apple")
         self.assertEqual(len(result.sections), 0)
 
-    # ── Exact match unchanged ──
+    def test_comparison_operators_still_work(self):
+        """Numeric comparison operators work alongside tagged params."""
+        data = """
+[[make=#ford model=#mustang hp=480]]: text
+Mustang
+[[/]]
 
-    def test_exact_match_still_works(self):
-        """#exchange.nasdaq matches exactly."""
-        result = self.view.filter("#exchange.nasdaq")
-        self.assertEqual(len(result.sections), 1)
-        self.assertIn("#exchange.nasdaq", result.sections[0].tags)
+[[make=#ford model=#f150 hp=450]]: text
+F150
+[[/]]
 
-    def test_exact_match_no_descendants(self):
-        """#exchange does NOT match #exchange.nasdaq."""
-        result = self.view.filter("#exchange")
+[[make=#chevy model=#corvette hp=670]]: text
+Corvette
+[[/]]
+        """
+        view = FlexTag.load(string=data, validate=False)
+        result = view.filter("hp>460")
+        self.assertEqual(len(result.sections), 2)
+
+    # ── .values() method ──
+
+    def test_values_returns_unique(self):
+        """.values() returns unique parameter values."""
+        result = self.view.values("exchange")
+        self.assertIn("#nyse", result)
+        self.assertIn("#nasdaq", result)
+        self.assertEqual(len(result), 2)
+
+    def test_values_after_filter(self):
+        """.values() respects prior filter."""
+        result = self.view.filter("exchange=#nyse").values("symbol")
+        self.assertIn("#aapl", result)
+        self.assertIn("#goog", result)
+        self.assertIn("#tsla", result)
+        self.assertEqual(len(result), 3)
+
+    def test_values_empty_key(self):
+        """.values() returns empty for nonexistent key."""
+        result = self.view.values("nonexistent")
+        self.assertEqual(result, [])
+
+    # ── .tags() method ──
+
+    def test_tags_returns_all(self):
+        """.tags() returns standalone tags and parameter tag values."""
+        result = self.view.tags()
+        # standalone tag
+        self.assertIn("#featured", result)
+        # parameter tag values
+        self.assertIn("#nyse", result)
+        self.assertIn("#aapl", result)
+        self.assertIn("#tech", result)
+
+    def test_tags_unique(self):
+        """.tags() returns unique values."""
+        result = self.view.tags()
+        # #nyse appears in 3 sections but should only be listed once
+        nyse_count = sum(1 for t in result if t.lower() == "#nyse")
+        self.assertEqual(nyse_count, 1)
+
+    # ── Exact match still works ──
+
+    def test_exact_tag_match(self):
+        """#exchange does NOT match #exchange.nasdaq (dots are literal now)."""
+        data = """
+[[#exchange.nasdaq]]: text
+NASDAQ
+[[/]]
+
+[[#exchange]]: text
+Exchange
+[[/]]
+        """
+        view = FlexTag.load(string=data, validate=False)
+        result = view.filter("#exchange")
         self.assertEqual(len(result.sections), 1)
         self.assertIn("#exchange", result.sections[0].tags)
-
-    # ── Negation unchanged ──
 
     def test_negation_still_works(self):
         """!#foo excludes sections with #foo."""
-        result = self.view.filter("!#foo")
-        tags = [s.tags[0] for s in result.sections]
-        self.assertNotIn("#foo", tags)
-
-    # ── Schema with new wildcards ──
-
-    def test_schema_double_star(self):
-        """Schema with .** validates all descendants."""
         data = """
-[[#item.**]]: ftml-schema
-name: str
+[[#foo]]: text
+Foo
 [[/]]
 
-[[#item.book name="Moby Dick"]]: text
-Valid
-[[/]]
-
-[[#item.book.chapter name="Loomings"]]: text
-Also valid — deeper descendant
+[[#bar]]: text
+Bar
 [[/]]
         """
-        view = FlexTag.load(string=data, validate=True)
-        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
-        self.assertEqual(len(data_sections), 2)
-
-    def test_schema_single_star(self):
-        """Schema with .* validates direct children only."""
-        data = """
-[[#item.*]]: ftml-schema
-name: str
-[[/]]
-
-[[#item.book name="Moby Dick"]]: text
-Valid — direct child
-[[/]]
-
-[[#item.book.chapter name="Loomings"]]: text
-NOT validated — two levels deep
-[[/]]
-
-[[#item.book.chapter]]: text
-No name — fine because schema doesn't apply at this depth
-[[/]]
-        """
-        view = FlexTag.load(string=data, validate=True)
-        data_sections = [s for s in view.sections if s.type_name != "ftml-schema"]
-        self.assertEqual(len(data_sections), 3)
+        view = FlexTag.load(string=data, validate=False)
+        result = view.filter("!#foo")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#bar", result.sections[0].tags)
 
 
 class TestRecursiveDirectoryLoading(unittest.TestCase):
@@ -797,9 +761,9 @@ class TestRecursiveDirectoryLoading(unittest.TestCase):
         # root.flextag, sub.ft, nested.flextag
         extensions = []
         for c in view.containers:
-            if c.source_name.endswith(".flextag"):
+            if c.source_path.endswith(".flextag"):
                 extensions.append(".flextag")
-            elif c.source_name.endswith(".ft"):
+            elif c.source_path.endswith(".ft"):
                 extensions.append(".ft")
         self.assertIn(".flextag", extensions)
         self.assertIn(".ft", extensions)
@@ -846,11 +810,11 @@ class TestSchemaContentType(unittest.TestCase):
     def test_schema_validates_header_only(self):
         """schema type validates header params but ignores body content."""
         data = """
-[[#product.*]]: schema
+[[#product]]: schema
 name: str
 [[/]]
 
-[[#product.electronics name="Keyboard"]]: ftml
+[[#product name="Keyboard"]]: ftml
 description = "Mechanical keyboard"
 random_field = 42
 [[/]]
@@ -865,12 +829,12 @@ random_field = 42
     def test_schema_does_not_validate_body(self):
         """schema type should NOT validate FTML body content."""
         data = """
-[[#item.*]]: schema
+[[#item]]: schema
 name: str
 price: float
 [[/]]
 
-[[#item.widget name="Widget" price=9.99]]: ftml
+[[#item name="Widget" price=9.99]]: ftml
 name = 42
 price = "not a number"
 [[/]]
@@ -884,10 +848,10 @@ price = "not a number"
     def test_schema_empty_body(self):
         """Empty schema body = tag-matching only, no property validation."""
         data = """
-[[#product.* (#electronics | #clothing)]]: schema
+[[#product (#electronics | #clothing)]]: schema
 [[/]]
 
-[[#product.laptop #electronics name="MacBook"]]: ftml
+[[#product #electronics name="MacBook"]]: ftml
 price = 2499.99
 [[/]]
         """
@@ -899,14 +863,14 @@ price = 2499.99
     def test_schema_and_ftml_schema_both_apply(self):
         """A section can match both schema and ftml-schema."""
         data = """
-[[#product.* (#electronics | #clothing)]]: schema
+[[#product (#electronics | #clothing)]]: schema
 [[/]]
 
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop #electronics name="MacBook"]]: ftml
+[[#product #electronics name="MacBook"]]: ftml
 name = "MacBook Pro"
 [[/]]
         """
@@ -917,14 +881,14 @@ name = "MacBook Pro"
     def test_schema_sections_excluded_from_results(self):
         """Schema sections should not appear in view.sections or filter results."""
         data = """
-[[#product.*]]: schema
+[[#product]]: schema
 [[/]]
 
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
         """
@@ -941,15 +905,15 @@ class TestStrictMode(unittest.TestCase):
     def test_strict_passes_all_matched(self):
         """All sections match a schema — no error."""
         data = """
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
 
-[[#product.phone name="iPhone"]]: text
+[[#product name="iPhone"]]: text
 A phone
 [[/]]
         """
@@ -959,11 +923,11 @@ A phone
     def test_strict_fails_unmatched(self):
         """Section matching zero schemas raises error in strict mode."""
         data = """
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
 
@@ -978,14 +942,14 @@ Random notes
     def test_strict_skips_schema_sections(self):
         """Schema and ftml-schema sections are exempt from strict check."""
         data = """
-[[#product.*]]: schema
+[[#product]]: schema
 [[/]]
 
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
         """
@@ -999,11 +963,11 @@ A laptop
 [[#myfile version="1.0"]]: file-metadata
 [[/]]
 
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
         """
@@ -1013,11 +977,11 @@ A laptop
     def test_strict_off_by_default(self):
         """Without strict=True, unmatched sections are fine."""
         data = """
-[[#product.*]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 [[/]]
 
-[[#product.laptop name="MacBook"]]: text
+[[#product name="MacBook"]]: text
 A laptop
 [[/]]
 
@@ -1048,10 +1012,10 @@ class TestParameterConstraints(unittest.TestCase):
     def test_header_constraint_syntax(self):
         """Schema header with constraint defs validates matching sections."""
         data = """
-[[#item.* name:str]]: schema
+[[#item name:str]]: schema
 [[/]]
 
-[[#item.widget name="Widget"]]: text
+[[#item name="Widget"]]: text
 A widget
 [[/]]
         """
@@ -1062,11 +1026,11 @@ A widget
     def test_header_constraint_with_body_defs(self):
         """Header constraint defs merge with body property definitions."""
         data = """
-[[#item.* name:str]]: ftml-schema
+[[#item name:str]]: ftml-schema
 price: float
 [[/]]
 
-[[#item.widget name="Widget" price=9.99]]: ftml
+[[#item name="Widget" price=9.99]]: ftml
 name = "Widget Pro"
 price = 9.99
 [[/]]
@@ -1078,10 +1042,10 @@ price = 9.99
     def test_header_constraint_validation_failure(self):
         """Missing required field from header constraint raises error."""
         data = """
-[[#item.* name:str]]: schema
+[[#item name:str]]: schema
 [[/]]
 
-[[#item.widget]]: text
+[[#item]]: text
 A widget without a name
 [[/]]
         """

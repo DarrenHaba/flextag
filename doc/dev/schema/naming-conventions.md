@@ -1,18 +1,18 @@
 # Schema Naming Conventions
 
-## The `#schema.` Prefix Convention
+## Tag Conventions for Schema Discoverability
 
-When designing from scratch, prefix schema-related tags with `#schema.`:
+When designing from scratch, use a consistent tagging pattern for schema-related sections:
 
 ```flextag
 // Schema definition
-[[#schema.product.**]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 price: float
 [[/]]
 
 // Data that follows the schema (both header AND body are validated)
-[[macbook #schema.product name="MacBook" price=2499.99]]: ftml
+[[#product name="MacBook" price=2499.99]]: ftml
 description = "Professional laptop for developers"
 specs = {
     cpu = "M3",
@@ -21,47 +21,46 @@ specs = {
 [[/]]
 ```
 
-## Why This Convention?
+## Why Consistent Tags?
 
 It makes discovery trivial. Load your FlexTag files and query:
 
 ```python
 // Find all schema definitions
-.filter("#schema.** :ftml-schema")
+.filter(":ftml-schema")
 
-// Find all data that uses schemas
-.filter("#schema.** :ftml")
+// Find all data validated by schemas
+.filter("#product :ftml")
 
-// Find everything schema-related (definitions + data)
-.filter("#schema.**")
+// Find everything related to a domain
+.filter("#product")
 ```
 
-## Drilling Down
+## Using Tagged Parameters for Organization
 
-The nested tag structure lets you explore hierarchically:
+Tagged parameters let you organize sections with structured metadata:
 
 ```python
-// All top-level schema categories
-.filter("#schema.*")
-// Returns: #schema.product, #schema.adapter, #schema.settings, etc.
+// All adapters
+.filter("#adapter")
 
-// All product-related sections
-.filter("#schema.product.**")
-// Returns: sections with #schema.product.laptop, etc.
+// OHLCV adapters specifically
+.filter("type=#ohlcv")
 
-// Just laptop data
-.filter("#schema.product.laptop :ftml")
+// What adapter types exist?
+view.filter("#adapter").values("type")
+// Returns: ["#ohlcv", "#news", "#websocket", etc.]
 ```
 
 ## Not Enforced
 
 This is a **convention**, not a requirement.
 
-`#schema` is not a built-in or internal tag — it's just a recommended prefix. You can add schemas to existing data without restructuring:
+You can add schemas to existing data without restructuring:
 
 ```flextag
 // Existing data (don't want to rename)
-[[yahoo #adapter #ohlcv name="Yahoo Finance"]]: ftml
+[[#adapter #ohlcv name="Yahoo Finance"]]: ftml
 description = "Free market data"
 [[/]]
 
@@ -73,14 +72,14 @@ name: str
 
 The schema matches by tags. No restructuring needed.
 
-## When to Use the Convention
+## When to Use Conventions
 
-**Use it when:**
+**Use them when:**
 - Designing a new system from scratch
 - You want easy discoverability of all schemas
-- You want hierarchical organization
+- You want consistent organization
 
-**Skip it when:**
+**Skip them when:**
 - Adding schemas to existing data
 - The existing tag structure is already well-organized
 - Renaming tags would break existing queries

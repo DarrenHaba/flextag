@@ -67,41 +67,46 @@ The tags you write ARE your search queries. That's the whole idea.
 
 **Filtering is case-insensitive** — tags can be written in whatever case makes sense (`#MyTag`, `#NASDAQ`, `#my_tag`) and queries will match regardless of case.
 
-### Hierarchical Tag Navigation
+### Tagged Parameters: Structure Without Repetition
 
-Tags support dot-separated hierarchy for deeper organization:
+Use tagged parameters (`#`-prefixed values) for structured, searchable metadata:
 ```flextag
-[[#product.electronics name="Keyboard"]]: ftml
-price = 79.99
-description = "Mechanical keyboard"
+[[#stock exchange=#nyse symbol=#aapl sector=#tech]]: ftml
+name = "Apple Inc."
+market_cap = 3200000000000
 [[/]]
 
-[[#product.electronics.accessories name="USB Cable"]]: ftml
-price = 9.99
-length = "2m"
+[[#stock exchange=#nyse symbol=#goog sector=#tech]]: ftml
+name = "Alphabet Inc."
+market_cap = 2100000000000
 [[/]]
 
-[[#product.clothing name="T-Shirt"]]: ftml
-price = 19.99
-size = "M"
+[[#stock exchange=#nasdaq symbol=#msft sector=#tech]]: ftml
+name = "Microsoft Corp."
+market_cap = 3100000000000
 [[/]]
 ```
 
-**Glob-Style Wildcards**
-
-| Pattern | Scope | Example |
-|---------|-------|---------|
-| `#tag` | Exact match | `#product.electronics` → keyboard only |
-| `#tag.*` | Direct children | `#product.*` → electronics, clothing |
-| `#tag.**` | All descendants | `#product.**` → keyboard, cable, t-shirt |
-| `#pro*` | Name completion | `#pro*` → product, promo, project |
+**Search any way you want:**
 ```python
-view.filter("#product.**")             # everything under product
-view.filter("#product.*")              # top-level categories only
-view.filter("#product.electronics.*")  # keyboard + cable
+view.filter("#stock")                  # all stocks
+view.filter("#nyse")                   # tag search — finds #nyse in any parameter
+view.filter("exchange=#nyse")          # key-value — NYSE stocks specifically
+view.filter("#stock #tech")            # AND — tech stocks
+view.filter("market_cap>2500000000000") # comparison — large caps
+
+# Discover what values exist (cascading dropdowns, autocomplete)
+view.filter("#stock").values("exchange")  # → ["#nyse", "#nasdaq"]
+view.filter("#stock").values("sector")    # → ["#tech"]
+view.filter("#stock").tags()              # → ["#stock", "#nyse", "#nasdaq", "#aapl", ...]
 ```
 
-Start broad, drill down. The hierarchy you design IS your navigation structure.
+**Key-exists check** — find sections that have a parameter regardless of value:
+```python
+view.filter("exchange=")  # any section with an exchange parameter
+```
+
+Tagged parameter values prefixed with `#` are searchable as tags. Plain string values (like `name="Apple Inc."`) are not — they're queried by key-value match only.
 
 ---
 
@@ -109,19 +114,19 @@ Start broad, drill down. The hierarchy you design IS your navigation structure.
 
 FlexTag validates data using the same tag-matching system. Schemas are sections too:
 ```flextag
-// Schema validates any section under #product
-[[#product.**]]: ftml-schema
+// Schema validates any section with #product tag
+[[#product]]: ftml-schema
 name: str
 price: float<min=0.01>
 [[/]]
 
 // Data automatically validated against matching schema
-[[#product.electronics name="Keyboard"]]: ftml
+[[#product #electronics name="Keyboard"]]: ftml
 price = 79.99
 description = "Mechanical keyboard"
 [[/]]
 
-[[#product.clothing name="T-Shirt"]]: ftml
+[[#product #clothing name="T-Shirt"]]: ftml
 price = 19.99
 size = "M"
 [[/]]
@@ -134,7 +139,7 @@ view = flextag.load(path="products.ft", validate=True)
 **Key Points:**
 
 * Schema uses `:` for type declarations, data uses `=` for values
-* Schema `#product.**` matches all sections under `#product` at any depth
+* Schema `#product` matches all sections with the `#product` tag
 * Extra fields like `description` and `size` are allowed - schemas only enforce what they declare
 * Constraints work just like FTML: `price: float<min=0.01, max=99999.99>`
 
@@ -143,20 +148,20 @@ view = flextag.load(path="products.ft", validate=True)
 Multiple schemas can apply to the same section through tag matching:
 ```flextag
 // Base schema for all products
-[[#product.**]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 price: float
 [[/]]
 
 // Additional requirements for electronics
-[[#product.electronics.**]]: ftml-schema
+[[#product #electronics]]: ftml-schema
 warranty: str
 sku: str
 [[/]]
 ```
 
-A `#product.clothing` section validates against the base schema (name, price).  
-A `#product.electronics` section validates against both (name, price, warranty, sku).
+A section with `#product #clothing` validates against the base schema (name, price).
+A section with `#product #electronics` validates against both (name, price, warranty, sku).
 
 No inheritance configuration needed - it's just tag matching.
 
@@ -248,7 +253,7 @@ configs = view.filter("#config")
 backends = view.filter("#compute")
 ```
 
-Same hashtags. Same wildcards (`*`, `.*`, `.**`). Same search logic.  
+Same hashtags. Same search logic.
 Section filtering and file filtering use identical syntax.
 
 ---
@@ -257,21 +262,21 @@ Section filtering and file filtering use identical syntax.
 
 FlexTag can catalog external files without storing their content:
 ```flextag
-[[#doc.report name="Q4 Sales" date="2025-12-01"]]: ftml
+[[#doc #report name="Q4 Sales" date="2025-12-01"]]: ftml
 path = "/reports/q4-sales-2025.pdf"
 author = "finance-team"
 status = "final"
 [[/]]
 
-[[#doc.spec name="API v3" date="2025-11-15"]]: ftml
+[[#doc #spec name="API v3" date="2025-11-15"]]: ftml
 path = "/specs/api-v3.md"
 owner = "backend-team"
 status = "draft"
 [[/]]
 ```
 ```python
-drafts = view.filter("#doc.** status=draft")
-reports = view.filter("#doc.report.**")
+drafts = view.filter("#doc status=draft")
+reports = view.filter("#doc #report")
 ```
 
 Organize any existing files - PDFs, images, CSVs, whatever - through tagging and metadata, without moving or converting anything.
@@ -282,11 +287,12 @@ Organize any existing files - PDFs, images, CSVs, whatever - through tagging and
 
 FlexTag provides powerful capabilities for managing complex data:
 
-* **Hierarchical Tags** - Tree-structured organization with precision queries
+* **Tagged Parameters** - `#`-prefixed parameter values are searchable as tags
 * **Schema Layering** - Multiple schemas apply through tag matching
 * **Mixed Content** - Any format (FTML, JSON, YAML, text, binary) in one file
 * **File Metadata** - Tag and filter entire files like sections
 * **Parameter Matching** - Filter by tag AND parameter values
+* **Value Discovery** - `.values(key)` and `.tags()` for autocomplete and cascading dropdowns
 * **Plain Text Storage** - Git-friendly, human-readable, no special tools
 
 ---

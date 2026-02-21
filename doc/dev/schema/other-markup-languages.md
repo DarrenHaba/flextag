@@ -6,13 +6,13 @@ The type system leaves room for validating other content types:
 
 ```flextag
 // FTML schema validates FTML content
-[[#schema.indicator]]: ftml-schema
+[[#indicator]]: ftml-schema
 name: str
 period: int = 20
 [[/]]
 
 // Could JSON Schema validate JSON content?
-[[#schema.config]]: json-schema
+[[#config]]: json-schema
 {
   "type": "object",
   "properties": {
@@ -22,7 +22,7 @@ period: int = 20
 [[/]]
 
 // Could it validate YAML too?
-[[#schema.settings]]: yaml-schema
+[[#settings]]: yaml-schema
 ...
 [[/]]
 ```

@@ -34,11 +34,11 @@ The `schema` content type validates header properties only. Body content is igno
 
 ```flextag
 // Only checks tags and header params — body is irrelevant
-[[#symbol.* (#nyse | #nasdaq | #arca)]]: schema
+[[#symbol exchange=(#nyse | #nasdaq | #arca)]]: schema
 [[/]]
 
 // With header property definitions
-[[#symbol.* name:str type:str]]: schema
+[[#symbol name:str type:str]]: schema
 [[/]]
 ```
 
@@ -46,16 +46,15 @@ Use `schema` when you want to enforce tag/parameter structure on sections with a
 
 ## Tag Matching Syntax
 
-Schema tags use the same glob-style wildcard syntax as filter queries:
+Schema tags use exact match. Tags are flat — no hierarchy, no wildcards.
 
 | Syntax  | Meaning                        |
 |---------|--------------------------------|
-| `#tag`  | Must have this tag (default)   |
-| `#tag.*` | Direct children (one level)   |
-| `#tag.**` | All descendants (any depth)  |
-| `#fo*`  | Character wildcard (name starts with prefix) |
+| `#tag`  | Must have this tag (exact match) |
 | `!#tag` | Must NOT have this tag         |
 | `(#a \| #b)` | OR group (at least one must match) |
+| `key=#value` | Parameter with tagged value |
+| `key=` | Parameter key must exist |
 
 ### `#tag` — Must Have Tag
 
@@ -69,32 +68,9 @@ name: str
 description = "Ceramic mug"
 [[/]]
 
-// Does NOT match — #product.electronics is a different tag than #product
-[[#product.electronics name="Keyboard"]]: ftml
-description = "Not validated by this schema"
-[[/]]
-
 // Matches — has #product (extra tags are fine)
 [[#product #featured #sale name="Coffee Mug"]]: ftml
 description = "Schema checks for presence, not exclusivity"
-[[/]]
-```
-
-### `#tag.**` — All Descendants
-
-```flextag
-// Matches #product.electronics, #product.electronics.keyboards, etc. (NOT #product itself)
-[[#product.**]]: ftml-schema
-name: str
-[[/]]
-```
-
-### `#tag.*` — Direct Children Only
-
-```flextag
-// Matches #product.electronics, #product.clothing — but NOT #product itself or #product.electronics.keyboards
-[[#product.*]]: ftml-schema
-category: str
 [[/]]
 ```
 
@@ -107,11 +83,17 @@ warranty: str
 [[/]]
 ```
 
-Negation works with wildcards too:
+### Tagged Parameters in Schemas
+
+Schema headers can use tagged parameter values to constrain which sections match:
 
 ```flextag
-[[#product.** !#discontinued]]: ftml-schema
-in_stock: bool
+// Only matches sections where exchange is one of the listed values
+[[exchange=(#nyse | #nasdaq | #arca)]]: schema
+[[/]]
+
+// Matches sections that have an exchange parameter (any value)
+[[exchange=]]: schema
 [[/]]
 ```
 
@@ -158,34 +140,19 @@ Layer multiple schemas — a base schema plus more specific ones:
 
 ```flextag
 // All products must have name and price
-[[#product.**]]: ftml-schema
-name: str
-price: float
-[[/]]
-
-// Electronics also need warranty
-[[#product.electronics]]: ftml-schema
-warranty: str
-[[/]]
-```
-
-- `#product.clothing` gets `name` and `price` (base schema applies)
-- `#product.electronics` gets `name`, `price`, AND `warranty` (both schemas apply)
-
-The same effect with flat tags:
-
-```flextag
 [[#product]]: ftml-schema
 name: str
 price: float
 [[/]]
 
+// Electronics also need warranty
 [[#product #electronics]]: ftml-schema
 warranty: str
 [[/]]
 ```
 
-A section with `#product` only gets `name` and `price`. A section with `#product #electronics` gets all three.
+- A section with `#product` only gets `name` and `price` (base schema applies)
+- A section with `#product #electronics` gets `name`, `price`, AND `warranty` (both schemas apply)
 
 ### Summary
 
@@ -202,7 +169,7 @@ XOR ("must have exactly one of these tags") is not supported. Handle in applicat
 
 - **Opt-in by default** — sections without a matching schema pass through unvalidated
 - **Strict mode available** — `strict=True` requires every section to match at least one schema
-- **Multiple schemas can match** — a section with `#product #electronics` could match both a `[[#product.**]]` schema and a `[[#product #electronics]]` schema; all apply independently
+- **Multiple schemas can match** — a section with `#product #electronics` could match both a `[[#product]]` schema and a `[[#product #electronics]]` schema; all apply independently
 - **Schemas don't inherit from each other** — each is an independent contract
 - **No optional markers** — tag presence IS the conditional; no `#electronics` tag means no `warranty` requirement
 
@@ -225,7 +192,7 @@ Strict mode skips `ftml-schema`, `schema`, and `file-metadata` sections — they
 Schema headers support property definitions with FTML constraint syntax:
 
 ```flextag
-[[#symbol.* name:str type:str]]: schema
+[[#symbol name:str type:str]]: schema
 [[/]]
 ```
 
@@ -236,7 +203,7 @@ These are merged with body property definitions. Use this for compact schemas wh
 Header parameters are for quick filtering. Body content holds the full data.
 
 ```flextag
-[[#product.electronics name="Wireless Keyboard" price=79.99]]: ftml
+[[#product #electronics name="Wireless Keyboard" price=79.99]]: ftml
 description = "Bluetooth mechanical keyboard"
 features = ["backlit", "rechargeable", "multi-device"]
 specs = {
@@ -255,7 +222,7 @@ Sometimes header and body data overlaps. That's OK — put the fields you filter
 If you need to search body content (e.g., find products where `specs.weight = "450g"`), filter by tags first to narrow down to a small set, then parse and search the body data in your application code:
 
 ```python
-electronics = view.filter("#product.electronics.**")
+electronics = view.filter("#product #electronics")
 for section in electronics:
     data = section.content  // parsed FTML dict
     if data["specs"]["weight"] == "450g":
@@ -264,68 +231,57 @@ for section in electronics:
 
 FlexTag is not a database. Tags and header parameters handle fast filtering. For deeper queries on body content, work with the parsed data directly.
 
-## Naming Conventions
+## Tagged Parameter Queries
 
-### The `#schema.` Prefix
-
-Optional convention for discoverability. Prefix schema-related tags with `#schema.`:
+Tagged parameters (values prefixed with `#`) are searchable as tags:
 
 ```flextag
-[[#schema.product.**]]: ftml-schema
-name: str
-price: float
+[[#product category=#electronics name="Wireless Keyboard" price=79.99]]: ftml
+description = "Bluetooth mechanical keyboard"
 [[/]]
 
-[[#schema.product name="Coffee Mug" price=12.99]]: ftml
-description = "Ceramic mug"
+[[#product category=#clothing name="T-Shirt" price=19.99]]: ftml
+description = "100% cotton crew neck"
 [[/]]
 ```
-
-Makes querying easy:
 
 ```python
-view.filter("#schema.** :ftml-schema")   // all schema definitions
-view.filter("#schema.** :ftml")          // all schema-validated data
-view.filter("#schema.**")               // everything schema-related
+// Search by tag — finds #electronics in any tag or parameter value
+view.filter("#electronics")
+
+// Search by key=value — explicit parameter match
+view.filter("category=#electronics")
+
+// Key-exists check — has a category parameter (any value)
+view.filter("category=")
+
+// Get unique values for cascading dropdowns
+view.filter("#product").values("category")
+// → ["#electronics", "#clothing"]
 ```
-
-Not enforced — just a recommended convention. Skip it when adding schemas to existing data.
-
-### Dual Tag Paths
-
-Use both a schema path and a data path on the same section:
-
-```flextag
-[[#schema.product.electronics #product.electronics name="Keyboard" price=79.99]]: ftml
-description = "Mechanical keyboard"
-[[/]]
-```
-
-- `#schema.product.electronics` for schema matching and discoverability
-- `#product.electronics` for clean data queries
 
 ## Full Example
 
 ```flextag
 // Schema — all products must have name and price
-[[#product.**]]: ftml-schema
+[[#product]]: ftml-schema
 name: str
 price: float
 [[/]]
 
 // Schema — electronics also need warranty
-[[#product.electronics.**]]: ftml-schema
+[[#product #electronics]]: ftml-schema
 warranty: str
 brand: str
 [[/]]
 
 // Schema — non-clearance products must have return_policy
-[[#product.** !#clearance]]: ftml-schema
+[[#product !#clearance]]: ftml-schema
 return_policy: str
 [[/]]
 
 // Data — matches first two schemas
-[[#product.electronics name="Wireless Keyboard" price=79.99 warranty="2 years" brand="Logitech" return_policy="30 days"]]: ftml
+[[#product #electronics name="Wireless Keyboard" price=79.99 warranty="2 years" brand="Logitech" return_policy="30 days"]]: ftml
 description = "Bluetooth mechanical keyboard"
 features = ["backlit", "rechargeable", "multi-device"]
 specs = {
@@ -336,13 +292,13 @@ specs = {
 [[/]]
 
 // Data — matches first schema only
-[[#product.clothing name="T-Shirt" price=19.99 return_policy="14 days"]]: ftml
+[[#product #clothing name="T-Shirt" price=19.99 return_policy="14 days"]]: ftml
 description = "100% cotton crew neck"
 sizes = ["S", "M", "L", "XL"]
 [[/]]
 
 // Data — clearance item, so return_policy schema does NOT apply
-[[#product.electronics #clearance name="Old Mouse" price=9.99 warranty="none" brand="Generic"]]: ftml
+[[#product #electronics #clearance name="Old Mouse" price=9.99 warranty="none" brand="Generic"]]: ftml
 description = "Last season model"
 [[/]]
 
@@ -354,9 +310,9 @@ TODO: add more products to the catalog
 
 Queries:
 ```python
-view.filter("#product.**")               // all products
-view.filter("#product.electronics.**")   // electronics only
-view.filter("#product.** !#clearance")   // non-clearance products
-view.filter("price>50")                  // expensive products
-view.filter(":ftml-schema")             // all schema definitions
+view.filter("#product")                     // all products
+view.filter("#product #electronics")        // electronics only
+view.filter("#product !#clearance")         // non-clearance products
+view.filter("price>50")                     // expensive products
+view.filter(":ftml-schema")                 // all schema definitions
 ```

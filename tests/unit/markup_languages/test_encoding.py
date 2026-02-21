@@ -36,7 +36,7 @@ def make_section(content_lines, type_name="text", tag="#test"):
         close_line=len(all_lines) - 1,
         is_self_closing=False,
         all_lines=all_lines,
-        source_name="<test>",
+        source_path="<test>",
     )
 
 

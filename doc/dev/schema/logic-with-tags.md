@@ -12,9 +12,7 @@ name: str
 [[/]]
 ```
 
-This checks for **presence**, not exclusivity. A section with `#adapter #ohlcv #live` still matches — it has `#adapter`. A section with only `#adapter.ohlcv` does not — that's a different tag. Extra tags on the section are fine; the schema only cares that its required tags are present.
-
-Use `.*` or `.**` to match children or descendants (see [what-schema-is.md](what-schema-is.md) for details).
+This checks for **presence**, not exclusivity. A section with `#adapter #ohlcv #live` still matches — it has `#adapter`. Extra tags on the section are fine; the schema only cares that its required tags are present.
 
 ## AND
 
@@ -55,41 +53,39 @@ IF-THEN comes from layering multiple schemas — a base schema plus more specifi
 
 ```flextag
 // All adapters must have connection_timeout
-[[#adapter.**]]: ftml-schema
+[[#adapter]]: ftml-schema
 connection_timeout: int
 [[/]]
 
 // Live adapters must ALSO have supports_live
-[[#adapter.live]]: ftml-schema
+[[#adapter #live]]: ftml-schema
 supports_live: bool
 [[/]]
 ```
 
 This creates a conditional effect:
 
-- **IF** `#adapter.ohlcv` → must have `connection_timeout` (base schema applies)
-- **IF** `#adapter.live` → must have `connection_timeout` AND `supports_live` (both schemas apply)
+- **IF** `#adapter` → must have `connection_timeout` (base schema applies)
+- **IF** `#adapter #live` → must have `connection_timeout` AND `supports_live` (both schemas apply)
 
 The "IF-THEN" isn't a single schema doing something special — it's the **combination** of schemas creating conditional requirements. The more specific tag picks up additional rules on top of the base.
 
-Another way to express this with flat tags:
+Tagged parameters work the same way:
 
 ```flextag
 // Base requirements for all adapters
 [[#adapter]]: ftml-schema
-connection_timeout: int
+name: str
 [[/]]
 
-// Extra requirements only when #live is also present
-[[#adapter #live]]: ftml-schema
-supports_live: bool
+// Extra requirements when type is ohlcv
+[[#adapter type=#ohlcv]]: ftml-schema
+timeframes: [str]
 [[/]]
 ```
 
-A section with `#adapter` only gets `connection_timeout`.
-A section with `#adapter #live` gets both `connection_timeout` and `supports_live`.
-
-Either approach works — hierarchical tags (`#adapter.live`) or flat tags (`#adapter #live`). The IF-THEN effect is the same: more tags = more schemas match = more requirements.
+A section with `#adapter` only gets `name`.
+A section with `#adapter type=#ohlcv` gets both `name` and `timeframes`.
 
 ## NOT (Negation)
 
@@ -104,15 +100,6 @@ rate_limit: int
 ```
 
 A section with `#adapter` matches. A section with `#adapter #deprecated` does not — the `!#deprecated` excludes it.
-
-Negation works with wildcards too:
-
-```flextag
-// Applies to all adapter descendants that are NOT discontinued
-[[#adapter.** !#discontinued]]: ftml-schema
-api_version: str
-[[/]]
-```
 
 ## Summary
 

@@ -12,32 +12,42 @@ Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 
 ### Tags
 
-- `@path` syntax removed — use `#tag` with dot-separated hierarchy (`#config.database`)
-- Exact match by default — `#config` does NOT match `#config.database`
-- Glob-style wildcards for filtering and schemas:
-  - `#tag` — exact match
-  - `#tag.*` — direct children (one level)
-  - `#tag.**` — all descendants (any depth)
-  - `#fo*` — character wildcard (name starts with prefix)
+- `@path` syntax removed — use flat `#tag` names
+- `.path` syntax removed — use flat `#tag` names
+- Dot hierarchy removed — `#exchange.nyse.aapl` is no longer valid syntax; use flat tags and tagged parameters instead
+- Exact match only — `#config` matches `#config`, nothing else
 - `!#tag` — negation (exclude sections with tag)
+- `(#a | #b)` — OR groups
+- `|` pipe operator for top-level OR in filters
 - Case-insensitive matching — `#NASDAQ`, `#nasdaq`, `#Nasdaq` all match
+- No wildcards — `*`, `.*`, `.**`, `#fo*` are all removed
+
+### Tagged Parameters
+
+- New `tag` parameter type — values prefixed with `#` are tags: `exchange=#nyse`
+- Tag search finds parameter values — `.filter("#nyse")` searches standalone tags AND tag-typed parameter values
+- Key-value filter — `.filter("exchange=#nyse")` matches specific parameter values
+- Key-exists filter — `.filter("exchange=")` matches sections that have the `exchange` parameter (any value)
+- `.values(key)` — returns unique values for a parameter key across matched sections (powers cascading dropdowns)
+- `.tags()` — returns all unique tags (standalone + parameter tag values) for autocomplete
+- String parameters are NOT searchable as tags — only `#`-prefixed values
 
 ### Schema System
 
 - Old `[[]]: schema` with field quantifiers (`?`, `+`, `*`) removed entirely
 - New `ftml-schema` sections — schemas are regular sections that target by tags
-- `[[#product.**]]: ftml-schema` validates all descendants of `#product`
+- `[[#product]]: ftml-schema` validates sections with the `#product` tag
 - New `schema` content type — metadata-only validation (header params only, body ignored)
 - Multiple schemas can match one section (all validated independently)
 - Validates both header parameters and FTML body content (`ftml-schema`) or header only (`schema`)
 - `|` and `()` for OR groups in schema headers: `[[#product (#electronics | #clothing)]]: ftml-schema`
 - `strict=True` load parameter — every section must match at least one schema
-- Parameter constraint definitions in schema headers: `[[#item.* name:str price:float]]: schema`
+- Parameter constraint definitions in schema headers: `[[#item name:str price:float]]: schema`
 - `match_tag()` — shared matching logic for filters and schemas
 
 ### Filtering
 
-- `view.filter()` uses same wildcard syntax as schemas
+- Exact match only — no wildcards, no hierarchy traversal
 - `|` pipe operator for OR: `view.filter("#electronics | #clothing")`
 - `()` grouping for OR within AND: `view.filter("#product (#electronics | #clothing)")`
 - Case-insensitive string comparisons for `=` and `!=` operators
@@ -46,6 +56,7 @@ Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 
 ### Other
 
+- `source_path` — exposed on Section and Container (replaces internal `source_name`), full absolute file path string
 - `binary` content type (returns `bytes`)
 - `recursive` parameter for `load()` with `dir=` (default: True)
 - Replaced Black + Flake8 with Ruff
@@ -53,8 +64,10 @@ Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 
 ### Removed
 
-- Section IDs, `@path` syntax, single bracket `[]` notation
+- Section IDs, `@path` syntax, `.path` syntax, single bracket `[]` notation
 - `[[]]: defaults` syntax
+- Dot hierarchy (`#a.b.c`) — use flat tags + tagged parameters
+- Wildcards (`*`, `.*`, `.**`, `#fo*`) — use exact match + tagged parameters
 - `to_dict()`, `to_flexmap()`, `FlexMap`, `FlexPoint`
 - Encoding types (`utf-8`, `latin-1`, `ascii`, `utf-16`)
 - Dependencies: duckdb, numpy, ftml, tomli-w, Black, Flake8

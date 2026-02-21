@@ -38,8 +38,8 @@ class TestFlexParser:
         assert "content" in section["raw_content"]
 
     def test_section_with_metadata(self, parser):
-        """Test parsing a section with tags, paths, and params"""
-        content = """[[#draft @path key=value]]
+        """Test parsing a section with tags and params"""
+        content = """[[#draft #path key=value]]
         Content
         [[/]]"""
 
