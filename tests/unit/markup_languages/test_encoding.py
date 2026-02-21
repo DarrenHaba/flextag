@@ -301,22 +301,32 @@ class TestEdgeCases:
         second_access = section.content
         assert first_access is second_access
 
-    def test_unknown_type_returns_text_with_warning(self, caplog):
-        """An unknown type name returns text with a warning."""
-        import logging
-
+    def test_custom_type_returns_text_silently(self):
+        """A custom/unrecognized type returns text with no warning."""
         test_string = """
-[[#data]]: some_unknown_type
-Content here
+[[#data]]: python
+print("hello world")
+[[/]]
+
+[[#style]]: css
+body { color: red; }
 [[/]]
 """
-        with caplog.at_level(logging.WARNING):
-            view = flextag.load(string=test_string)
-            content = view.sections[0].content
+        view = flextag.load(string=test_string)
 
-        assert isinstance(content, str)
-        assert content == "Content here"
-        assert any("unknown" in r.message.lower() for r in caplog.records)
+        # Content returned as text
+        assert isinstance(view.sections[0].content, str)
+        assert view.sections[0].content == 'print("hello world")'
+        assert isinstance(view.sections[1].content, str)
+        assert view.sections[1].content == "body { color: red; }"
+
+        # Type string stored as metadata
+        assert view.sections[0].type_name == "python"
+        assert view.sections[1].type_name == "css"
+
+        # Filterable by type
+        python_sections = view.filter(":python")
+        assert len(python_sections.sections) == 1
 
     def test_self_closing_section(self):
         """A self-closing section returns empty string."""

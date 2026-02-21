@@ -45,9 +45,17 @@ Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 - Parameter constraint definitions in schema headers: `[[#item name:str price:float]]: schema`
 - `match_tag()` — shared matching logic for filters and schemas
 
+### Content Types
+
+- Built-in types FlexTag parses: `text`, `ftml`, `json`, `yaml`, `toml`, `binary`, `ftml-schema`, `schema`
+- Custom types accepted silently — any unrecognized type (e.g. `python`, `css`, `html`) is treated as text, no warning, type string stored as metadata
+- Default type is `text` when no type specified
+- `:type` filter syntax — `.filter(":python")`, `.filter(":ftml-schema")`, `.filter("#config :yaml")`
+
 ### Filtering
 
 - Exact match only — no wildcards, no hierarchy traversal
+- `:type` content type filter: `view.filter(":python")`, `view.filter(":ftml-schema")`
 - `|` pipe operator for OR: `view.filter("#electronics | #clothing")`
 - `()` grouping for OR within AND: `view.filter("#product (#electronics | #clothing)")`
 - Case-insensitive string comparisons for `=` and `!=` operators

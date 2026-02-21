@@ -685,6 +685,127 @@ Bar
         self.assertIn("#bar", result.sections[0].tags)
 
 
+class TestTypeFiltering(unittest.TestCase):
+    """Tests for :type content type filtering."""
+
+    def setUp(self):
+        self.data = """
+[[#config]]: ftml
+host = "localhost"
+port = 5432
+[[/]]
+
+[[#script]]: python
+print("hello world")
+[[/]]
+
+[[#style]]: css
+body { color: red; }
+[[/]]
+
+[[#deploy]]: yaml
+provider: aws
+[[/]]
+
+[[#notes]]: text
+Just some notes.
+[[/]]
+
+[[#bare_section]]
+No type specified.
+[[/]]
+"""
+        self.view = FlexTag.load(string=self.data, validate=False)
+
+    def test_filter_builtin_type(self):
+        """Filter by built-in type like :ftml."""
+        result = self.view.filter(":ftml")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#config", result.sections[0].tags)
+
+    def test_filter_custom_type(self):
+        """Filter by custom type like :python."""
+        result = self.view.filter(":python")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#script", result.sections[0].tags)
+
+    def test_filter_another_custom_type(self):
+        """Filter by another custom type like :css."""
+        result = self.view.filter(":css")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#style", result.sections[0].tags)
+
+    def test_filter_text_type(self):
+        """Filter by :text matches explicit text and default (no type)."""
+        result = self.view.filter(":text")
+        self.assertEqual(len(result.sections), 2)
+
+    def test_filter_type_case_insensitive(self):
+        """Type filtering is case-insensitive."""
+        result = self.view.filter(":PYTHON")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#script", result.sections[0].tags)
+
+    def test_filter_type_with_tag(self):
+        """Combine :type with #tag in AND filter."""
+        result = self.view.filter("#config :ftml")
+        self.assertEqual(len(result.sections), 1)
+        self.assertIn("#config", result.sections[0].tags)
+
+    def test_filter_type_no_match(self):
+        """Filter by nonexistent type returns nothing."""
+        result = self.view.filter(":html")
+        self.assertEqual(len(result.sections), 0)
+
+    def test_filter_type_negation(self):
+        """Negation with !:type excludes sections of that type."""
+        result = self.view.filter("!:text")
+        # Should exclude the 2 text sections, leaving 4
+        self.assertEqual(len(result.sections), 4)
+
+    def test_filter_type_or(self):
+        """OR with pipe between types."""
+        result = self.view.filter(":python | :css")
+        self.assertEqual(len(result.sections), 2)
+
+    def test_default_type_is_text(self):
+        """Section with no type specified defaults to text."""
+        bare = [s for s in self.view.sections if "#bare_section" in s.tags]
+        self.assertEqual(len(bare), 1)
+        self.assertEqual(bare[0].type_name, "text")
+
+    def test_custom_type_content_is_text(self):
+        """Custom type content is returned as-is (string)."""
+        script = self.view.filter(":python").sections[0]
+        self.assertIsInstance(script.content, str)
+        self.assertEqual(script.content, 'print("hello world")')
+
+    def test_custom_type_stored_as_metadata(self):
+        """Custom type string is stored and accessible."""
+        script = self.view.filter(":python").sections[0]
+        self.assertEqual(script.type_name, "python")
+
+    @requires_ftml
+    def test_filter_schema_type(self):
+        """Filter by :ftml-schema finds schema sections."""
+        schema_data = """
+[[#product]]: ftml-schema
+name: str
+price: float
+[[/]]
+
+[[#product name="Mug" price=9.99]]: ftml
+name = "Mug"
+price = 9.99
+[[/]]
+"""
+        view = FlexTag.load(string=schema_data, validate=True)
+        schemas = view.filter(":ftml-schema")
+        self.assertEqual(len(schemas.sections), 1)
+        data = view.filter(":ftml")
+        self.assertEqual(len(data.sections), 1)
+
+
 class TestRecursiveDirectoryLoading(unittest.TestCase):
     """Tests for recursive directory loading."""
 

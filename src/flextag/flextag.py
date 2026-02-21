@@ -1319,8 +1319,14 @@ class Section:
 
     def _parse_content(self) -> Any:
         """
-        Parse content based on type_name: 'text', 'binary', 'ftml', 'yaml', 'json', 'toml', etc.
-        'file-metadata', 'defaults', 'schema' handle separately in Container.
+        Parse content based on type_name.
+
+        Built-in types that FlexTag parses: text, binary, ftml, json, yaml, toml,
+        ftml-schema, schema, file-metadata.
+
+        Any unrecognized type is treated as text — content returned as-is, no
+        warning, no error. The type string is stored as metadata so users can
+        filter on it (e.g. :python) or route it through their own pipelines.
         """
         raw = self.raw_content
         tname = self.type_name.lower().strip()
@@ -1398,11 +1404,9 @@ class Section:
         elif tname == "file-metadata":
             return raw
 
-        # Default: treat unknown types as text with a warning
+        # Custom types: treat as text, no warning. The type string is stored
+        # as metadata so users can filter on it (e.g. .filter(":python")).
         else:
-            logger.warning(
-                f"Unknown content type '{tname}' in section '{self.id}', treating as text."
-            )
             return raw
 
 
@@ -1706,22 +1710,23 @@ class FlexView:
         ast = parse_query(query)
 
         if target.lower() == "sections":
-            matched_secs = []
+            matched_secs = set()
             for s in self._raw_sections:
                 if self._match_section(s, ast):
-                    matched_secs.append(s)
+                    matched_secs.add(id(s))
             new_conts = []
             for c in self._containers:
-                sub_secs = [sec for sec in c.sections if sec in matched_secs]
+                sub_secs = [sec for sec in c.raw_sections if id(sec) in matched_secs]
                 if sub_secs:
-                    new_c = Container(sub_secs, c.source_path)
-                    # preserve file metadata and special sections
+                    new_c = Container.__new__(Container)
+                    new_c.source_path = c.source_path
+                    new_c.raw_sections = sub_secs
+                    new_c.sections = sub_secs  # All matched sections visible
                     new_c.file_metadata = c.file_metadata
                     new_c.defaults = c.defaults
                     new_c.id = c.id
                     new_c.tags = c.tags.copy()
                     new_c.parameters = c.parameters.copy()
-                    # preserve property schemas
                     if hasattr(c, "property_schemas"):
                         new_c.property_schemas = c.property_schemas
                     new_conts.append(new_c)
@@ -1805,7 +1810,7 @@ class FlexView:
     def _match_container_token(self, token: str, container) -> bool:
         """
         Match a single token against container metadata.
-        Handles tags (#tag), parameter expressions, OR groups, and ID matching.
+        Handles tags (#tag), parameter expressions, OR groups, and type filters.
         """
         # OR group — (#a | #b | #c)
         if token.startswith("(") and token.endswith(")"):
@@ -1832,12 +1837,16 @@ class FlexView:
                             matched = True
                             break
 
+        # Content type filter — containers don't have a type, so always false
+        elif token.startswith(":"):
+            matched = False
+
         # Key-exists check: "exchange=" (no value after =)
         elif token.endswith("=") and not any(c in token[:-1] for c in "!<>"):
             key = token[:-1].strip()
             matched = key in container.parameters
 
-        # Handle parameter expression (key=value, key>=value, etc.)
+        # Parameter expression (key=value, key>=value, etc.)
         elif OP_PATTERN.match(token):
             m = OP_PATTERN.match(token)
             key, op, rhs_str = (
@@ -1845,36 +1854,10 @@ class FlexView:
                 m.group(2).strip(),
                 m.group(3).strip(),
             )
-
-            logger.debug(
-                f"Parameter expression: key='{key}', op='{op}', rhs_str='{rhs_str}'"
-            )
-
             if key in container.parameters:
                 lhs_val = container.parameters[key]
-
-                # Handle quoted strings specially - remove quotes if present
-                if (
-                    rhs_str.startswith('"')
-                    and rhs_str.endswith('"')
-                    and len(rhs_str) >= 2
-                ):
-                    rhs_str = rhs_str[1:-1]  # Remove surrounding quotes
-
-                # Convert to appropriate type
                 rhs_val = parse_basic_value(rhs_str)
-
-                logger.debug(f"Comparing: '{lhs_val}' {op} '{rhs_val}'")
                 matched = compare_op(lhs_val, rhs_val, op)
-                logger.debug(f"Match result: {matched}")
-            else:
-                logger.debug(
-                    f"Parameter '{key}' not found in container with params: {container.parameters}"
-                )
-
-        # Handle ID match
-        else:
-            matched = token == container.id
 
         return (not matched) if neg else matched
 
@@ -1912,12 +1895,17 @@ class FlexView:
                         return True
             return False
 
+        # Content type filter: ":python", ":ftml", ":ftml-schema", etc.
+        if token.startswith(":"):
+            filter_type = token[1:].strip().lower()
+            return sec.type_name.lower() == filter_type
+
         # Key-exists check: "exchange=" (no value after =)
         if token.endswith("=") and not any(c in token[:-1] for c in "!<>"):
             key = token[:-1].strip()
             return key in sec.parameters
 
-        # If param expression
+        # Parameter expression (key=value, key>=value, etc.)
         m = OP_PATTERN.match(token)
         if m:
             key, op, rhs_str = (
@@ -1931,8 +1919,7 @@ class FlexView:
             rhs_val = parse_basic_value(rhs_str)
             return compare_op(lhs_val, rhs_val, op)
 
-        # else match by ID
-        return token == sec.id
+        return False
 
 
 ##############################################################################

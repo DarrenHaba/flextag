@@ -221,6 +221,47 @@ Remember to update deploy script before release.
 
 Tags, parameters, filtering, and schemas work identically regardless of content type.
 
+### Content Types
+
+**Built-in types** that FlexTag parses: `text`, `ftml`, `json`, `yaml`, `toml`, `binary`, `ftml-schema`, `schema`.
+
+**Custom types** — put whatever you want. FlexTag stores the type string as metadata and hands the content back as text:
+```flextag
+[[#compute]]: python
+def calculate(bars, period=20):
+    return sum(bars[-period:]) / period
+[[/]]
+
+[[#style]]: css
+body { color: red; }
+[[/]]
+
+[[#template]]: html
+<div>{{content}}</div>
+[[/]]
+```
+
+No warning, no error. FlexTag doesn't try to parse custom types — it just stores them. Your application decides what to do with the content.
+
+**Default type** is `text`. No type specified = text:
+```flextag
+[[#notes]]
+Just some notes.
+[[/]]
+```
+
+### Filtering by Type
+
+Use `:type` to filter sections by content type:
+```python
+view.filter(":ftml")                    # all FTML sections
+view.filter(":python")                  # all Python sections
+view.filter("#config :yaml")            # YAML configs specifically
+view.filter(":ftml-schema")             # all schema definitions
+view.filter("!:text")                   # everything except text
+view.filter(":python | :css")           # Python or CSS sections
+```
+
 ---
 
 ### File-Level Metadata
