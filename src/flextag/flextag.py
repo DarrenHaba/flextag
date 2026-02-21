@@ -697,9 +697,13 @@ class PropertySchema:
         property_definitions: str,
         source_section: "Section",
         schema_type: str = "ftml-schema",
+        header_definitions: str = "",
+        body_definitions: str = "",
     ):
         self.tags = tags  # e.g., ["#adapter", "#live"]
-        self.property_definitions = property_definitions  # FTML schema content
+        self.property_definitions = property_definitions  # FTML schema content (merged, legacy)
+        self.header_definitions = header_definitions  # Header-only schema defs
+        self.body_definitions = body_definitions  # Body-only schema defs
         self.source_section = source_section
         self.schema_type = schema_type  # "ftml-schema" or "schema"
 
@@ -752,8 +756,12 @@ class PropertySchema:
         Validate section against schema definitions.
 
         For ftml-schema: TWO SEPARATE VALIDATIONS occur:
-        1. Header properties - always validated against schema
-        2. FTML body content - validated if section's content type is 'ftml'
+        1. Header properties — validated against header-defined fields only
+        2. FTML body content — validated against body-defined fields only
+
+        Header and body are validated independently with their own schemas.
+        Extra fields are allowed in both — the schema only requires its
+        defined fields to be present and correctly typed.
 
         For schema (metadata-only): ONLY header properties are validated.
         Body content is ignored regardless of content type.
@@ -762,29 +770,30 @@ class PropertySchema:
         """
         errors = []
 
-        # Skip header validation if no property definitions
-        if not self.property_definitions.strip():
-            return errors
-
         # Validation 1: Header properties (both schema types)
-        try:
-            params_ftml = self._parameters_to_ftml(section.parameters)
-            header_errors = validate_ftml(params_ftml, self.property_definitions)
-            for err in header_errors:
-                errors.append(f"Header property error: {err}")
-        except Exception as e:
-            errors.append(f"Header validation error: {str(e)}")
+        # Only validate if there are header-specific definitions
+        header_schema = self.header_definitions
+        if header_schema and header_schema.strip():
+            try:
+                params_ftml = self._parameters_to_ftml(section.parameters)
+                header_errors = validate_ftml(params_ftml, header_schema)
+                for err in header_errors:
+                    errors.append(f"Header property error: {err}")
+            except Exception as e:
+                errors.append(f"Header validation error: {str(e)}")
 
         # Validation 2: FTML body content (ftml-schema only, not schema)
         if self.schema_type == "ftml-schema" and section.type_name.lower() == "ftml":
-            try:
-                body_content = section.raw_content
-                if body_content.strip():  # Only validate non-empty body
-                    body_errors = validate_ftml(body_content, self.property_definitions)
-                    for err in body_errors:
-                        errors.append(f"Body content error: {err}")
-            except Exception as e:
-                errors.append(f"Body validation error: {str(e)}")
+            body_schema = self.body_definitions
+            if body_schema and body_schema.strip():
+                try:
+                    body_content = section.raw_content
+                    if body_content.strip():  # Only validate non-empty body
+                        body_errors = validate_ftml(body_content, body_schema)
+                        for err in body_errors:
+                            errors.append(f"Body content error: {err}")
+                except Exception as e:
+                    errors.append(f"Body validation error: {str(e)}")
 
         return errors
 
@@ -912,15 +921,19 @@ def validate_ftml(content: str, schema: str) -> list[str]:
     Validate FTML content against the schema using the actual FTML library.
     Takes the raw FTML content string, not parsed data.
     Returns a list of error messages (empty if valid).
+
+    Uses strict=False so extra fields are allowed — the schema only
+    checks that its defined fields are present and correctly typed.
     """
     if not ftml:
         logger.warning("FTML library not available, skipping validation")
         return []
 
     try:
-        # Validate the raw FTML content directly against the schema
+        # Validate with strict=False: extra fields are allowed,
+        # schema only requires its defined fields to be present.
         logger.debug("Validating FTML content against schema")
-        ftml.load(content, schema=schema)
+        ftml.load(content, schema=schema, strict=False)
         return []
     except Exception as e:
         logger.debug(f"FTML validation failed: {e}")
@@ -1538,8 +1551,9 @@ class Container:
         for section in self.raw_sections:
             stype = section.type_name.lower()
             if stype in ("ftml-schema", "schema"):
-                # Merge header constraint defs into body property definitions
-                prop_defs = section.raw_content
+                # Separate header and body schema definitions
+                body_defs = section.raw_content
+                header_defs = ""
                 if hasattr(section, "schema_defs") and section.schema_defs:
                     # Convert header defs like "market_cap:int<min=0>"
                     # to FTML schema lines like "market_cap: int<min=0>"
@@ -1548,14 +1562,20 @@ class Container:
                         key, type_def = sd.split(":", 1)
                         header_lines.append(f"{key.strip()}: {type_def.strip()}")
                     header_defs = "\n".join(header_lines)
-                    if prop_defs.strip():
-                        prop_defs = header_defs + "\n" + prop_defs
-                    else:
-                        prop_defs = header_defs
+
+                # Merged defs kept for backward compat (legacy callers)
+                if header_defs and body_defs.strip():
+                    merged = header_defs + "\n" + body_defs
+                elif header_defs:
+                    merged = header_defs
+                else:
+                    merged = body_defs
 
                 schema = PropertySchema(
                     tags=section.tags,
-                    property_definitions=prop_defs,
+                    property_definitions=merged,
+                    header_definitions=header_defs,
+                    body_definitions=body_defs,
                     source_section=section,
                     schema_type=stype,
                 )

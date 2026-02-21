@@ -443,14 +443,14 @@ No schema applies, no name required
         self.assertEqual(len(data_sections), 4)
 
     def test_schema_group_validation_failure(self):
-        """Schema with () group rejects missing required field."""
+        """Schema with () group rejects missing required field in ftml body."""
         data = """
 [[#product (#electronics | #clothing)]]: ftml-schema
 name: str
 [[/]]
 
-[[#product #electronics]]: text
-Missing name — should fail validation
+[[#product #electronics]]: ftml
+category = "phones"
 [[/]]
         """
         with self.assertRaises(Exception):
