@@ -120,25 +120,112 @@ If a user wants a truly atomic, unsearchable-by-segment tag, they just use a fla
 
 ## New Methods
 
-### `.children()` on FlexView
+### `.children(tag, depth=1)` on FlexView
 
-After filtering, extract the **distinct next-level segment values** from matched tags. This powers cascading dropdowns.
+Extract **descendant segment values** from tag paths. The `depth` parameter controls how many levels forward to traverse. Powers cascading dropdowns, autocomplete suggestions, and hierarchy exploration.
+
+- `depth=1` (default): returns a flat `list[str]` of unique next-level segments
+- `depth=N` (N > 1): returns a nested `dict` going N levels deep
+- `depth=0`: returns a nested `dict` going all the way to the leaf segments
 
 ```python
-# What makes are available?
-view.filter("#make").children()
-# → ["ford", "dodge", "chevy"]
+# Given:
+# [[#make#ford#mustang#gt]]
+# [[#make#ford#mustang#svt]]
+# [[#make#ford#f150#xlt]]
+# [[#make#ford#f150#lariat]]
+# [[#make#dodge#charger#rt]]
+# [[#color#ford#blue]]
 
-# What models does Ford have?
-view.filter("#make#ford").children()
-# → ["mustang", "f150", "bronco"]
+# depth=1 (default) — one level forward, flat list
+view.children("#make")
+# → ["ford", "dodge"]
 
-# What years for the Mustang?
-view.filter("#make#ford#mustang").children()
-# → ["2024", "2025"]
+view.children("#make#ford")
+# → ["mustang", "f150"]
+
+view.children("#ford")
+# → ["mustang", "f150", "blue"]
+#     ^ ford appears under #make AND #color, so all children included
+
+# depth=2 — two levels forward, dict with lists
+view.children("#ford", depth=2)
+# → {
+#     "mustang": ["gt", "svt"],
+#     "f150":    ["xlt", "lariat"],
+#     "blue":    []
+# }
+
+# depth=0 — all levels forward, fully nested dict
+view.children("#ford", depth=0)
+# → {
+#     "mustang": {"gt": {}, "svt": {}},
+#     "f150":    {"xlt": {}, "lariat": {}},
+#     "blue":    {}
+# }
+
+# Scoped with a sub-path — only children within that path
+view.children("#make#ford", depth=0)
+# → {
+#     "mustang": {"gt": {}, "svt": {}},
+#     "f150":    {"xlt": {}, "lariat": {}}
+# }
+# ^ no "blue" — that's under #color#ford, not #make#ford
 ```
 
-`.children()` operates on the **literal stored tag strings** — it looks at matched sections' tags, finds the query segment within each chain, and returns the unique values of the next segment. No hidden data, no expansion. The user can inspect `section.tags` and see exactly where the result came from.
+### `.parents(tag, depth=1)` on FlexView
+
+Extract **ancestor segment values** from tag paths. The `depth` parameter controls how many levels backward to traverse. Powers reverse lookups — "where does this tag live?"
+
+- `depth=1` (default): returns a flat `list[str]` of unique parent segments
+- `depth=N` (N > 1): returns a nested `dict` going N levels up
+- `depth=0`: returns a nested `dict` going all the way to the root segments
+
+```python
+# depth=1 (default) — one level backward
+view.parents("#ford")
+# → ["make", "color"]
+
+view.parents("#make")
+# → []
+#     ^ it's a root, nothing above it
+
+# depth=2 — two levels backward
+view.parents("#mustang", depth=2)
+# → {"ford": ["make", "color"]}
+
+# depth=0 — all the way to roots
+view.parents("#gt", depth=0)
+# → {"mustang": {"ford": {"make": {}}}}
+
+# Scoped — full path narrows the result
+view.parents("#make#ford#mustang#gt")
+# → ["mustang"]
+```
+
+### Autocomplete scenario
+
+```python
+# User types "ford" in a search box
+
+# What could come before ford?
+view.parents("#ford")
+# → ["make", "color"]
+# UI suggests: "Did you mean #make#ford or #color#ford?"
+
+# What comes after ford?
+view.children("#ford")
+# → ["mustang", "f150", "blue"]
+# UI shows these as next options
+
+# User picks #make#ford, drill deeper
+view.children("#make#ford")
+# → ["mustang", "f150"]
+
+# User picks mustang
+view.children("#make#ford#mustang")
+# → ["gt", "svt"]
+```
 
 ### `.tags()` on FlexView
 
@@ -146,7 +233,7 @@ Return all unique tags across all sections in the view. Powers autocomplete at t
 
 ```python
 all_tags = view.tags()
-# → ["#make#ford#mustang#2024", "#make#ford#f150#2024", "#make#dodge#charger#2024", ...]
+# → ["#make#ford#mustang#gt", "#make#ford#f150#xlt", "#make#dodge#charger#rt", ...]
 
 # App-layer autocomplete: filter this list as the user types
 ```

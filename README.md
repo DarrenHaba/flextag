@@ -110,6 +110,59 @@ Tagged parameter values prefixed with `#` are searchable as tags. Plain string v
 
 ---
 
+### Tag Paths: Hierarchical Tags
+
+Link tags into paths with `#` to create searchable hierarchies. Every segment is independently searchable — no need to remember the full path. A section can belong to multiple paths, like a product shelved in multiple departments:
+```flextag
+[[#dept#household#cleaning #dept#hardware#cleaning]]: ftml
+name = "Push Broom"
+price = 24.99
+[[/]]
+
+[[#dept#household#cleaning]]: ftml
+name = "Sponge Pack"
+price = 4.99
+[[/]]
+
+[[#dept#hardware#tools]]: ftml
+name = "Claw Hammer"
+price = 12.99
+[[/]]
+```
+
+**Every segment is a search target:**
+```python
+view.filter("#cleaning")              # push broom + sponge pack (any path)
+view.filter("#hardware")              # push broom + claw hammer
+view.filter("#dept#household")        # push broom + sponge pack
+view.filter("#household#cleaning")    # push broom + sponge pack
+```
+
+**Trailing `#` — direct children only:**
+```python
+view.filter("#dept#")                 # → household, hardware (one level deep)
+view.filter("#dept#hardware#")        # → cleaning, tools (not deeper)
+```
+
+**Explore the hierarchy with `.children()` and `.parents()`:**
+```python
+view.children("#dept")                    # → ["household", "hardware"]
+view.children("#dept#hardware")           # → ["cleaning", "tools"]
+view.children("#dept", depth=0)           # → {"household": {"cleaning": {}}, "hardware": {"cleaning": {}, "tools": {}}}
+
+view.parents("#cleaning")                 # → ["household", "hardware"]
+```
+
+Space between tags means separate, independent tags. No space means a path:
+```flextag
+[[#dept#hardware#tools #brand#stanley]]
+```
+- `#dept#hardware#tools` — one path (three segments)
+- `#brand#stanley` — another path (two segments)
+- `.filter("#hardware")` matches, `.filter("#stanley")` matches, `.filter("#hardware #stanley")` matches (AND)
+
+---
+
 ### Data Integrity: Schema Validation
 
 FlexTag validates data using the same tag-matching system. Schemas are sections too:
@@ -328,12 +381,13 @@ Organize any existing files - PDFs, images, CSVs, whatever - through tagging and
 
 FlexTag provides powerful capabilities for managing complex data:
 
+* **Tag Paths** - Hierarchical `#dept#hardware#tools` tags where every segment is searchable
 * **Tagged Parameters** - `#`-prefixed parameter values are searchable as tags
 * **Schema Layering** - Multiple schemas apply through tag matching
 * **Mixed Content** - Any format (FTML, JSON, YAML, text, binary) in one file
 * **File Metadata** - Tag and filter entire files like sections
 * **Parameter Matching** - Filter by tag AND parameter values
-* **Value Discovery** - `.values(key)` and `.tags()` for autocomplete and cascading dropdowns
+* **Value Discovery** - `.values(key)`, `.tags()`, `.children(tag)`, `.parents(tag)` for autocomplete and cascading dropdowns
 * **Plain Text Storage** - Git-friendly, human-readable, no special tools
 
 ---

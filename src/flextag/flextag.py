@@ -253,9 +253,25 @@ def parse_query(query: str) -> list[list[str]]:
         elif ch in " \t":
             i += 1
         else:
-            # Regular token — read until whitespace or paren
+            # Regular token — read until whitespace or standalone paren.
+            # If we hit '(' mid-chain (preceded by '#'), include the
+            # parenthesized group and continue reading the chain.
             j = i
-            while j < len(query) and query[j] not in " \t(":
+            while j < len(query) and query[j] not in " \t":
+                if query[j] == "(":
+                    if j > i and query[j - 1] == "#":
+                        # Inline OR group in a chain — include it
+                        depth = 1
+                        j += 1
+                        while j < len(query) and depth > 0:
+                            if query[j] == "(":
+                                depth += 1
+                            elif query[j] == ")":
+                                depth -= 1
+                            j += 1
+                        continue  # keep reading after ')'
+                    else:
+                        break  # standalone paren — stop
                 j += 1
             tokens.append(query[i:j])
             i = j
@@ -302,8 +318,15 @@ def match_tag(pattern: str, tags: list[str]) -> bool:
     """
     Match a single tag pattern against a list of tags.
 
-    Exact match only (case-insensitive). Tags can be authored in any
-    case and queries will match regardless.
+    Segment-based chain matching (case-insensitive). A pattern matches if
+    it appears as a single segment or contiguous sub-chain within a tag.
+
+    Examples::
+
+        match_tag("#aapl", ["#exchange#nyse#aapl"])       → True  (segment)
+        match_tag("#exchange#nyse", ["#exchange#nyse#aapl"]) → True  (sub-chain)
+        match_tag("#exchange#", ["#exchange#nyse"])        → True  (direct child)
+        match_tag("#exchange#", ["#exchange#nyse#aapl"])   → False (too deep)
 
     This is the shared matching logic used by both schema matching
     and filter queries.
@@ -323,10 +346,108 @@ def _match_pattern(pat: str, tag: str) -> bool:
     """
     Core pattern matching — both strings already lowercase, no # prefix.
 
-    Exact match only.
+    Segment-based chain matching. The ``#`` character is a segment boundary
+    within a chained tag. Any individual segment or contiguous sub-chain is
+    a valid match target.
+
+    Examples (after stripping leading ``#``)::
+
+        _match_pattern("aapl", "exchange#nyse#aapl")           → True  (segment)
+        _match_pattern("exchange#nyse", "exchange#nyse#aapl")  → True  (sub-chain)
+        _match_pattern("exchange#aapl", "exchange#nyse#aapl")  → False (non-contiguous)
+        _match_pattern("exchange#", "exchange#nyse#aapl")      → False (trailing # = direct child only)
+        _match_pattern("exchange#", "exchange#nyse")           → True  (one more segment after)
+
+    Inline OR groups::
+
+        _match_pattern("symbol#(nyse|nasdaq)#aapl", "symbol#nyse#aapl") → True
     """
-    # Exact match
-    return pat == tag
+    # Trailing # means "direct children only" — matched prefix must be followed
+    # by exactly one more segment and then the chain ends.
+    trailing_hash = pat.endswith("#")
+    if trailing_hash:
+        pat = pat.rstrip("#")
+
+    pat_segments = _expand_or_segments(pat)
+    tag_segments = tag.split("#")
+
+    # Try to find pat_segments as a contiguous sub-sequence in tag_segments
+    pat_len = len(pat_segments)
+    tag_len = len(tag_segments)
+
+    for i in range(tag_len - pat_len + 1):
+        if _segments_match(pat_segments, tag_segments[i : i + pat_len]):
+            if trailing_hash:
+                # Must be followed by exactly one more segment (and that's the end)
+                remaining = tag_len - (i + pat_len)
+                if remaining == 1:
+                    return True
+            else:
+                return True
+
+    return False
+
+
+def _expand_or_segments(pat: str) -> list[str]:
+    """Split a pattern on ``#`` into segments, preserving OR groups as-is."""
+    segments: list[str] = []
+    i = 0
+    current: list[str] = []
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "#" and not current:
+            # Leading # or consecutive # — skip
+            i += 1
+            continue
+        if ch == "#":
+            segments.append("".join(current))
+            current = []
+            i += 1
+            continue
+        if ch == "(":
+            # Read through matching )
+            j = i + 1
+            depth = 1
+            while j < len(pat) and depth > 0:
+                if pat[j] == "(":
+                    depth += 1
+                elif pat[j] == ")":
+                    depth -= 1
+                j += 1
+            current.append(pat[i:j])
+            i = j
+            continue
+        current.append(ch)
+        i += 1
+    if current:
+        segments.append("".join(current))
+    return segments
+
+
+def _segments_match(pat_segments: list[str], tag_segments: list[str]) -> bool:
+    """Check if pattern segments match tag segments (handles OR groups)."""
+    if len(pat_segments) != len(tag_segments):
+        return False
+    for ps, ts in zip(pat_segments, tag_segments):
+        if ps.startswith("(") and ps.endswith(")"):
+            # OR group — e.g. "(nyse|nasdaq|arca)"
+            inner = ps[1:-1]
+            alternatives = [alt.strip().lower() for alt in inner.split("|")]
+            if ts not in alternatives:
+                return False
+        else:
+            if ps != ts:
+                return False
+    return True
+
+
+def _dict_leaves_to_lists(tree: dict, levels_remaining: int) -> dict:
+    """Convert leaf-level dicts in a nested tree to sorted lists."""
+    if levels_remaining <= 1:
+        return {k: sorted(v.keys()) for k, v in tree.items()}
+    return {
+        k: _dict_leaves_to_lists(v, levels_remaining - 1) for k, v in tree.items()
+    }
 
 
 def format_error_location(source_path, line_num, column_num):
@@ -1826,6 +1947,112 @@ class FlexView:
                         seen.add(val_lower)
                         result.append(val)
         return result
+
+    def children(self, tag: str, depth: int = 1) -> list[str] | dict:
+        """
+        Extract descendant segment values from tag paths.
+
+        Args:
+            tag: A tag pattern like ``"#make"`` or ``"#make#ford"``.
+            depth: How many levels forward to traverse.
+                ``1`` (default) → flat ``list[str]`` of unique next-level segments.
+                ``N > 1`` → nested ``dict`` going N levels deep.
+                ``0`` → nested ``dict`` all the way to leaf segments.
+
+        Example::
+
+            view.children("#make")       → ["ford", "dodge"]
+            view.children("#ford", depth=2)
+            # → {"mustang": ["gt", "svt"], "f150": ["xlt", "lariat"]}
+        """
+        query_segments = tag.lstrip("#").lower().split("#")
+        query_len = len(query_segments)
+        # Collect all suffix tails after the matched query
+        tails: list[list[str]] = []
+        for sec in self._user_sections:
+            for sec_tag in sec.tags:
+                tag_segments = sec_tag.lstrip("#").lower().split("#")
+                tag_len = len(tag_segments)
+                for i in range(tag_len - query_len + 1):
+                    if tag_segments[i : i + query_len] == query_segments:
+                        tail = tag_segments[i + query_len :]
+                        if tail:
+                            tails.append(tail)
+                        break  # first match per tag is enough
+
+        if depth == 1:
+            seen = set()
+            result = []
+            for tail in tails:
+                seg = tail[0]
+                if seg not in seen:
+                    seen.add(seg)
+                    result.append(seg)
+            return result
+
+        # Build nested dict for depth > 1 or depth == 0
+        return self._build_children_tree(tails, depth)
+
+    @staticmethod
+    def _build_children_tree(tails: list[list[str]], depth: int) -> dict:
+        """Build a nested dict from suffix tails, limited to *depth* levels (0=unlimited)."""
+        tree: dict = {}
+        for tail in tails:
+            node = tree
+            limit = len(tail) if depth == 0 else min(depth, len(tail))
+            for level, seg in enumerate(tail[:limit]):
+                if seg not in node:
+                    node[seg] = {}
+                node = node[seg]
+
+        # If depth == 2, convert leaf dicts to sorted lists
+        if depth >= 2:
+            return _dict_leaves_to_lists(tree, depth - 1)
+        return tree
+
+    def parents(self, tag: str, depth: int = 1) -> list[str] | dict:
+        """
+        Extract ancestor segment values from tag paths.
+
+        Args:
+            tag: A tag pattern like ``"#ford"`` or ``"#make#ford#mustang#gt"``.
+            depth: How many levels backward to traverse.
+                ``1`` (default) → flat ``list[str]`` of unique parent segments.
+                ``N > 1`` → nested ``dict`` going N levels up.
+                ``0`` → nested ``dict`` all the way to root segments.
+
+        Example::
+
+            view.parents("#ford")           → ["make", "color"]
+            view.parents("#gt", depth=0)    → {"mustang": {"ford": {"make": {}}}}
+        """
+        query_segments = tag.lstrip("#").lower().split("#")
+        query_len = len(query_segments)
+        # Collect all prefix tails (reversed) before the matched query
+        tails: list[list[str]] = []
+        for sec in self._user_sections:
+            for sec_tag in sec.tags:
+                tag_segments = sec_tag.lstrip("#").lower().split("#")
+                tag_len = len(tag_segments)
+                for i in range(tag_len - query_len + 1):
+                    if tag_segments[i : i + query_len] == query_segments:
+                        prefix = tag_segments[:i]
+                        if prefix:
+                            # Reverse so we walk "upward" from the match
+                            tails.append(list(reversed(prefix)))
+                        break
+
+        if depth == 1:
+            seen = set()
+            result = []
+            for tail in tails:
+                seg = tail[0]
+                if seg not in seen:
+                    seen.add(seg)
+                    result.append(seg)
+            return result
+
+        return self._build_children_tree(tails, depth)
 
     def _match_container_token(self, token: str, container) -> bool:
         """
