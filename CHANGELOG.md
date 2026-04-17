@@ -1,4 +1,4 @@
-## [0.4.0a1] - 2026-02-07
+## [0.4.0] - 2026-04-17
 
 Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.
 

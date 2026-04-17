@@ -247,7 +247,7 @@ class TestSchemaChains:
     def test_schema_matches_chain(self):
         content = """\
 [[#adapter]]: ftml-schema
-name: str
+description: str
 [[/]]
 
 [[#adapter#ohlcv#yahoo name="Yahoo"]]: ftml
@@ -265,12 +265,12 @@ description = "provider"
 adapter_type: str
 [[/]]
 
-[[#adapter#ohlcv adapter_type="market"]]: ftml
-data here
+[[#adapter#ohlcv]]: ftml
+adapter_type = "market"
 [[/]]
 
-[[#adapter#ohlcv#yahoo adapter_type="market"]]: ftml
-deeper data
+[[#adapter#ohlcv#yahoo]]: ftml
+deeper_info = "yahoo details"
 [[/]]
 """
         # #adapter# schema matches #adapter#ohlcv (direct child) ✓
