@@ -8,9 +8,9 @@ packages = [{ include = "flextag", from = "src" }]
 license = "MIT"
 
 [tool.poetry.urls]
-"Homepage" = "https://github.com/DarrenHaba/flextag"
-"Repository" = "https://github.com/DarrenHaba/flextag"
-"Bug Tracker" = "https://github.com/DarrenHaba/flextag/issues"
+"Homepage" = "https://github.com/techie-studios/flextag"
+"Repository" = "https://github.com/techie-studios/flextag"
+"Bug Tracker" = "https://github.com/techie-studios/flextag/issues"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"

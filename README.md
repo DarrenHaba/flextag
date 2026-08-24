@@ -102,4 +102,4 @@ long-term, pin `flextag==0.4.0`.
 ## License
 
 MIT — see [LICENSE](LICENSE).
-Source, issues: https://github.com/DarrenHaba/flextag
+Source, issues: https://github.com/techie-studios/flextag
