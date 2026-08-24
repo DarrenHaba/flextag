@@ -1,10 +1,9 @@
 [tool.poetry]
 name = "flextag"
-version = "0.4.0"
-description = "A lightweight markup language for structured content with powerful section-based organization, metadata filtering, and validation capabilities."
+version = "0.5.0a1"
+description = "Tags and sections for markdown: tagged fenced code blocks, YAML front matter, and one filterable dataset across your files."
 authors = ["DarrenHaba <darrenhaba@live.com>"]
 readme = "README.md"
-exclude = ["demo", "dev"]
 packages = [{ include = "flextag", from = "src" }]
 license = "MIT"
 
@@ -15,21 +14,23 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-tomli = { version = "^2.1.0", python = "<3.11" }
 pyyaml = "^6.0.2"
+# tomli: used ONLY by the deprecated legacy (.ft) reader on Python 3.10 for
+# `: toml` bodies; lazily imported there, so it stays a conditional dependency.
+tomli = { version = "^2.1.0", python = "<3.11" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"
-pytest-cov = "^6.0.0"
 ruff = "^0.9.0"
-pre-commit = "^4.0.1"
-nox = "^2024.4.15"
-openai = "^1.52.2"
-notebook = "^7.2.2"
+# ftml: only some legacy-format tests exercise `: ftml` bodies; the package
+# itself never imports it.
+ftml = ">=0.1.0a1"
 
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+# legacy.py is the frozen 0.4 module — deprecated, removed at 0.6, not linted.
+extend-exclude = ["src/flextag/legacy.py"]
 
 [tool.ruff.lint]
 select = [
@@ -48,6 +49,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B", "C4"]  # Less strict for tests
+# the legacy suite is frozen alongside the module it tests — removed at 0.6
+"tests/legacy/*" = ["F401", "F841", "W291", "E", "I", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

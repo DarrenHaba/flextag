@@ -1,414 +1,105 @@
-# FlexTag: Tag-Based Data Organization
+# FlexTag
 
-> **Alpha Status**: Under active development - [Report Issues](https://github.com/DarrenHaba/flextag/issues) | [Send Feedback](https://github.com/DarrenHaba/flextag/issues).
+**Tags and sections for markdown.**
+
+Your markdown files already hold structured content — configs, snippets,
+prompts, parameters — trapped inside code blocks a program can't find. FlexTag
+makes those blocks addressable: tag a fence with a YAML mapping, and every
+tagged block in a file — or an entire folder of files — becomes one
+filterable dataset.
+
+There is no new format to learn. A FlexTag file is a plain markdown file that
+renders normally everywhere — GitHub, Obsidian, your editor — because FlexTag
+has **no syntax of its own**: metadata is YAML, structure is CommonMark, and
+the library is only a loader.
+
+## A file
+
+````markdown
+---
+flextag: 0.5
+tags: [config]
+id: endpoints
 ---
 
-## Hashtags Meet Data Integrity
+# Service endpoints
 
-FlexTag: Organize with `#hashtags`, validate with schemas, search like a search engine. One syntax from a single config to an entire directory.
+Anything outside a tagged fence is ordinary markdown — prose, images, tables.
 
-**Why developers choose it:**
-
-* **Data containerization** - Tag and organize data across sections, files and directories. Self-contained and composable.
-* **Metadata-based organization** - Tags and parameters everywhere. Search files and sections uniformly.
-* **Flexible filtering** - Select files and sections by tags and parameters, query as one dataset.
-* **Format agnostic** - Mix FTML, JSON, YAML, text, binary. Search uniformly.
-* **Schema validation** - Data integrity through metadata-based matching.
-* **Don't repeat yourself** - One syntax mirrors across data, schemas, and queries.
-* **Plain text always** - Human-readable, git-friendly, AI-friendly.
-
----
-
-### Quick Example: Tag, Store, Search
-
-See how FlexTag organizes data with hashtags:
-```flextag
-[[#database #production]]: ftml
-host = "prod-db.example.com"
-port = 5432
-max_connections = 100
-[[/]]
-
-[[#database #development]]: ftml
-host = "localhost"
-port = 5432
-max_connections = 5
-[[/]]
-
-[[#cache #production]]: ftml
-host = "redis.example.com"
-ttl = 3600
-[[/]]
+```yaml {tags: [database, env/production], id: prod-db}
+host: prod-db.example.com
+port: 5432
 ```
 
-**Key Insight**: Tags on sections become your search queries. No separate query language to learn.
-
-### Your First Python Search
-
-Now let's search this data using the tags:
-```bash
-pip install flextag
+```yaml {tags: [database, env/development], id: dev-db}
+host: localhost
+port: 5432
 ```
+````
+
+## Loading it
+
 ```python
 import flextag
 
-# Load the file
-view = flextag.load(path="config.ft")
+view = flextag.load("configs/")             # one file, or a whole folder (recursive)
 
-# Search using the same hashtags
-production = view.filter("#production")      # database + cache sections
-databases = view.filter("#database")        # production + development
-prod_db = view.filter("#database #production")  # exact match
-
-print(prod_db[0].data)  # {'host': 'prod-db.example.com', 'port': 5432, ...}
+view.filter(tag="database")                 # sections by tag, across all files
+view.filter(tag="database", id="prod-db")   # AND on any metadata key
+view.filter(tag="production")               # path tags match any segment
+view.values("id")                           # unique values -> dropdowns
+view.files(tag="config")                    # FILES, selected by front matter
 ```
 
-The tags you write ARE your search queries. That's the whole idea.
+A `Section` is plain data — `tags`, `meta` (dict), `lang` (the fence language,
+i.e. the body's type), `body` (verbatim), `file`, `line` — so any shape you
+need is one comprehension away:
 
-**Filtering is case-insensitive** — tags can be written in whatever case makes sense (`#MyTag`, `#NASDAQ`, `#my_tag`) and queries will match regardless of case.
-
-### Tagged Parameters: Structure Without Repetition
-
-Use tagged parameters (`#`-prefixed values) for structured, searchable metadata:
-```flextag
-[[#stock exchange=#nyse symbol=#aapl sector=#tech]]: ftml
-name = "Apple Inc."
-market_cap = 3200000000000
-[[/]]
-
-[[#stock exchange=#nyse symbol=#goog sector=#tech]]: ftml
-name = "Alphabet Inc."
-market_cap = 2100000000000
-[[/]]
-
-[[#stock exchange=#nasdaq symbol=#msft sector=#tech]]: ftml
-name = "Microsoft Corp."
-market_cap = 3100000000000
-[[/]]
-```
-
-**Search any way you want:**
 ```python
-view.filter("#stock")                  # all stocks
-view.filter("#nyse")                   # tag search — finds #nyse in any parameter
-view.filter("exchange=#nyse")          # key-value — NYSE stocks specifically
-view.filter("#stock #tech")            # AND — tech stocks
-view.filter("market_cap>2500000000000") # comparison — large caps
-
-# Discover what values exist (cascading dropdowns, autocomplete)
-view.filter("#stock").values("exchange")  # → ["#nyse", "#nasdaq"]
-view.filter("#stock").values("sector")    # → ["#tech"]
-view.filter("#stock").tags()              # → ["#stock", "#nyse", "#nasdaq", "#aapl", ...]
+{s.meta["id"]: s.body for s in view.filter(tag="database").sections}
 ```
 
-**Key-exists check** — find sections that have a parameter regardless of value:
-```python
-view.filter("exchange=")  # any section with an exchange parameter
-```
+## The whole format, four rules
+
+1. **Front matter** (`---` YAML at the top) is the file's metadata. `tags:`
+   tags the file; `flextag: 0.5` declares the format and version. Files
+   without the marker still load — the marker states intent.
+2. **A section** is a fenced code block whose info string is a YAML flow
+   mapping: `` ```yaml {tags: [database], id: prod-db} ``. The `tags` key
+   tags the section; every other key is metadata. A fence without a mapping
+   is an illustration — prose, not data.
+3. **Hierarchy** is a naming convention: `/` inside a tag
+   (`env/production`). Filters match any segment; `view.children("env")`
+   walks levels.
+4. Malformed YAML is a **loud error** naming the file and line — never a
+   silently smaller index.
+
+YAML and CommonMark define everything else. FlexTag ships no parser, no
+grammar, and no highlighter of its own; PyYAML is the single dependency.
+
+## Install
 
-Tagged parameter values prefixed with `#` are searchable as tags. Plain string values (like `name="Apple Inc."`) are not — they're queried by key-value match only.
-
----
-
-### Tag Paths: Hierarchical Tags
-
-Link tags into paths with `#` to create searchable hierarchies. Every segment is independently searchable — no need to remember the full path. A section can belong to multiple paths, like a product shelved in multiple departments:
-```flextag
-[[#dept#household#cleaning #dept#hardware#cleaning]]: ftml
-name = "Push Broom"
-price = 24.99
-[[/]]
-
-[[#dept#household#cleaning]]: ftml
-name = "Sponge Pack"
-price = 4.99
-[[/]]
-
-[[#dept#hardware#tools]]: ftml
-name = "Claw Hammer"
-price = 12.99
-[[/]]
-```
-
-**Every segment is a search target:**
-```python
-view.filter("#cleaning")              # push broom + sponge pack (any path)
-view.filter("#hardware")              # push broom + claw hammer
-view.filter("#dept#household")        # push broom + sponge pack
-view.filter("#household#cleaning")    # push broom + sponge pack
-```
-
-**Trailing `#` — direct children only:**
-```python
-view.filter("#dept#")                 # → household, hardware (one level deep)
-view.filter("#dept#hardware#")        # → cleaning, tools (not deeper)
-```
-
-**Explore the hierarchy with `.children()` and `.parents()`:**
-```python
-view.children("#dept")                    # → ["household", "hardware"]
-view.children("#dept#hardware")           # → ["cleaning", "tools"]
-view.children("#dept", depth=0)           # → {"household": {"cleaning": {}}, "hardware": {"cleaning": {}, "tools": {}}}
-
-view.parents("#cleaning")                 # → ["household", "hardware"]
-```
-
-Space between tags means separate, independent tags. No space means a path:
-```flextag
-[[#dept#hardware#tools #brand#stanley]]
-```
-- `#dept#hardware#tools` — one path (three segments)
-- `#brand#stanley` — another path (two segments)
-- `.filter("#hardware")` matches, `.filter("#stanley")` matches, `.filter("#hardware #stanley")` matches (AND)
-
----
-
-### Data Integrity: Schema Validation
-
-FlexTag validates data using the same tag-matching system. Schemas are sections too:
-```flextag
-// Schema validates any section with #product tag
-[[#product]]: ftml-schema
-name: str
-price: float<min=0.01>
-[[/]]
-
-// Data automatically validated against matching schema
-[[#product #electronics name="Keyboard"]]: ftml
-price = 79.99
-description = "Mechanical keyboard"
-[[/]]
-
-[[#product #clothing name="T-Shirt"]]: ftml
-price = 19.99
-size = "M"
-[[/]]
-```
-```python
-# Validation happens automatically on load
-view = flextag.load(path="products.ft", validate=True)
-```
-
-**Key Points:**
-
-* Schema uses `:` for type declarations, data uses `=` for values
-* Schema `#product` matches all sections with the `#product` tag
-* Extra fields like `description` and `size` are allowed - schemas only enforce what they declare
-* Constraints work just like FTML: `price: float<min=0.01, max=99999.99>`
-
-### Schema Layering
-
-Multiple schemas can apply to the same section through tag matching:
-```flextag
-// Base schema for all products
-[[#product]]: ftml-schema
-name: str
-price: float
-[[/]]
-
-// Additional requirements for electronics
-[[#product #electronics]]: ftml-schema
-warranty: str
-sku: str
-[[/]]
-```
-
-A section with `#product #clothing` validates against the base schema (name, price).
-A section with `#product #electronics` validates against both (name, price, warranty, sku).
-
-No inheritance configuration needed - it's just tag matching.
-
----
-
-### Python Type Hint Foundation
-
-The core syntax comes from Python type hints, used consistently everywhere:
-```
-name: type = value
-```
-
-**Section Parameters** (compact, no spaces):
-```flextag
-[[#config version:int=2 debug:bool=false]]: ftml
-```
-
-**FTML Data Content** (readable spacing):
-```ftml
-version: int = 2
-debug: bool = false
-```
-
-**FTML Schema** (types without values):
-```ftml
-version: int
-debug: bool
-```
-
-Same pattern at every level. Only spacing and assignment context change.
-
----
-
-### Mixed Content in One File
-
-Each section declares its content type - mix any formats freely:
-```flextag
-[[#config]]: ftml
-host = "localhost"
-port = 5432
-[[/]]
-
-[[#endpoints]]: json
-{"users": "/api/users", "products": "/api/products"}
-[[/]]
-
-[[#deploy]]: yaml
-provider: aws
-regions:
-  - us-east-1
-[[/]]
-
-[[#notes]]: text
-Remember to update deploy script before release.
-[[/]]
-```
-
-Tags, parameters, filtering, and schemas work identically regardless of content type.
-
-### Content Types
-
-**Built-in types** that FlexTag parses: `text`, `ftml`, `json`, `yaml`, `toml`, `binary`, `ftml-schema`, `schema`.
-
-**Custom types** — put whatever you want. FlexTag stores the type string as metadata and hands the content back as text:
-```flextag
-[[#compute]]: python
-def calculate(bars, period=20):
-    return sum(bars[-period:]) / period
-[[/]]
-
-[[#style]]: css
-body { color: red; }
-[[/]]
-
-[[#template]]: html
-<div>{{content}}</div>
-[[/]]
-```
-
-No warning, no error. FlexTag doesn't try to parse custom types — it just stores them. Your application decides what to do with the content.
-
-**Default type** is `text`. No type specified = text:
-```flextag
-[[#notes]]
-Just some notes.
-[[/]]
-```
-
-### Filtering by Type
-
-Use `:type` to filter sections by content type:
-```python
-view.filter(":ftml")                    # all FTML sections
-view.filter(":python")                  # all Python sections
-view.filter("#config :yaml")            # YAML configs specifically
-view.filter(":ftml-schema")             # all schema definitions
-view.filter("!:text")                   # everything except text
-view.filter(":python | :css")           # Python or CSS sections
-```
-
----
-
-### File-Level Metadata
-
-Files themselves can be tagged and searched using the same syntax:
-```flextag
-// Tag the entire FILE
-[[#plugin #indicator version:str="2.0" author:str="team"]]: file-metadata
-[[/]]
-
-// Regular sections inside
-[[#config]]: ftml
-period = 20
-color = "#2196F3"
-[[/]]
-
-[[#compute]]: python
-def calculate(bars, period=20):
-    return sum(bars[-period:]) / period
-[[/]]
-```
-
-**File Filtering Uses the Same Tag Syntax**
-```python
-# Filter FILES by their metadata tags
-view = flextag.load(dir="plugins/", filter_query="#indicator")
-
-# Then filter SECTIONS within matched files
-configs = view.filter("#config")
-backends = view.filter("#compute")
-```
-
-Same hashtags. Same search logic.
-Section filtering and file filtering use identical syntax.
-
----
-
-### Indexing External Files
-
-FlexTag can catalog external files without storing their content:
-```flextag
-[[#doc #report name="Q4 Sales" date="2025-12-01"]]: ftml
-path = "/reports/q4-sales-2025.pdf"
-author = "finance-team"
-status = "final"
-[[/]]
-
-[[#doc #spec name="API v3" date="2025-11-15"]]: ftml
-path = "/specs/api-v3.md"
-owner = "backend-team"
-status = "draft"
-[[/]]
-```
-```python
-drafts = view.filter("#doc status=draft")
-reports = view.filter("#doc #report")
-```
-
-Organize any existing files - PDFs, images, CSVs, whatever - through tagging and metadata, without moving or converting anything.
-
----
-
-## Advanced Features
-
-FlexTag provides powerful capabilities for managing complex data:
-
-* **Tag Paths** - Hierarchical `#dept#hardware#tools` tags where every segment is searchable
-* **Tagged Parameters** - `#`-prefixed parameter values are searchable as tags
-* **Schema Layering** - Multiple schemas apply through tag matching
-* **Mixed Content** - Any format (FTML, JSON, YAML, text, binary) in one file
-* **File Metadata** - Tag and filter entire files like sections
-* **Parameter Matching** - Filter by tag AND parameter values
-* **Value Discovery** - `.values(key)`, `.tags()`, `.children(tag)`, `.parents(tag)` for autocomplete and cascading dropdowns
-* **Plain Text Storage** - Git-friendly, human-readable, no special tools
-
----
-
-## Installation
 ```bash
-pip install flextag
+pip install flextag==0.5.0a1
 ```
 
-Both `.flextag` and `.ft` file extensions are recognized.
+0.5 is a pre-release: pip only selects it when pinned, so nothing changes for
+anyone on 0.4.
 
----
+## The old format (0.4 and earlier)
 
-## ⚠️ Alpha Status
+Before 0.5, FlexTag was its own container format (`[[#tag ...]]: type` in
+`.ft` files). That reader still works during migration:
 
-FlexTag is in alpha (v0.4.0a1). Syntax may change before v1.0. Not recommended for production use.
+```python
+from flextag import legacy
+view = legacy.load(path="old.ft")   # DeprecationWarning
+```
 
-## Contributing
-
-Contributions welcome! Submit a Pull Request or open an issue.
+It is frozen and will be removed in 0.6. If you need the old format
+long-term, pin `flextag==0.4.0`.
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT — see [LICENSE](LICENSE).
+Source, issues: https://github.com/DarrenHaba/flextag

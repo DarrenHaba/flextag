@@ -1,3 +1,29 @@
+## [0.5.0a1] - 2026-08-24
+
+FlexTag re-based on markdown. A deliberate, breaking simplification: the
+format no longer has syntax of its own.
+
+### The format
+- A FlexTag file IS a markdown file (`.md`). Front matter (YAML) carries the
+  file's metadata and tags, and declares the format: `flextag: 0.5`.
+- A section is a fenced code block whose info string is a YAML flow mapping:
+  ```` ```yaml {tags: [database], id: prod-db} ````. The fence language types
+  the body. Fences without a mapping are prose illustrations.
+- Hierarchy is `/` inside a tag (`env/production`); filters match any segment.
+- Bad YAML fails loudly with file and line.
+
+### The API
+- `flextag.load(path)` — one file or a whole tree -> a `View`.
+- `View.filter(tag=..., **meta)`, `.files(...)`, `.values(key)`, `.tags()`,
+  `.children(prefix)`; `Section` is plain data (tags, meta, lang, body, file,
+  line). The 0.4 query-string language is gone.
+
+### Removed
+- The `[[#tag ...]]: type` container, the schema system, FTML integration,
+  tag paths (`#a#b`), query strings. The 0.4 reader remains importable as
+  `flextag.legacy` (DeprecationWarning on use) and is REMOVED at 0.6 — pin
+  `flextag==0.4.0` if you need the old format long-term.
+
 ## [0.4.0] - 2026-04-17
 
 Complete rewrite of FlexTag. Nothing is backward compatible with 0.3.x.

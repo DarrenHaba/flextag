@@ -1,25 +1,22 @@
-#Ignore virtual environment
+# Virtual environments
 .venv/
-
-# Ignore the coverage report file
-.coverage
-.coverage/
 
 # Python cache
 __pycache__/
 *.py[cod]
-*.pyo
 
-# Distribution files
+# Coverage
+.coverage
+
+# Build output
 /dist/
 /build/
-
 /*.egg-info
 
-# IDE-specific files
+# IDEs
 .idea/
 .vscode/
 
-# Other temporary files
+# Local tool state
 *.log
-/.claude/settings.local.json
+/.claude/

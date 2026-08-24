@@ -1,130 +1,32 @@
-"""
-FlexTag - Public API
+"""FlexTag — tags and sections for markdown.
 
-This module provides the main entry points for the FlexTag library:
-- load(...) -> parse FlexTag data into a FlexView with rich querying abilities
-- validate(...) -> validate FlexTag content against schema rules
-- filter(...) -> filter sections or containers using query language
+Ordinary markdown files; machine content in fenced code blocks; a YAML mapping
+on the fence line tags each block. `load()` reads a file or a whole folder
+tree and returns every tagged section as one filterable dataset.
+
+    import flextag
+    view = flextag.load("configs/")
+    view.filter(tag="database", id="prod-db")
+
+The deprecated 0.4 container (`[[#tag ...]]: type` in `.ft` files) remains
+readable during migration via `from flextag import legacy` — it is frozen and
+removed at 0.6.
 """
 
-from .flextag import (
-    FlexTag,
+from .core import (
+    FileDoc,
     FlexTagError,
-    FlexTagSettings,
-    FlexTagSyntaxError,
-    FlexView,
-    SchemaSectionError,
-    SchemaTypeError,
-    SchemaValidationError,
-    logger,
+    Section,
+    View,
+    load,
+    load_file,
 )
 
-# Version constants
-FLEXTAG_VERSION = "0.4.0a1"  # The FlexTag specification version
-PACKAGE_VERSION = "0.4.0a1"  # The package version - update with each release
+__version__ = "0.5.0a1"
 
+#: The FORMAT version files declare in front matter (`flextag: 0.5`) —
+#: intentionally coarser than the package version.
+FORMAT_VERSION = "0.5"
 
-def get_flextag_version():
-    """Return the FlexTag specification version this parser implements."""
-    return FLEXTAG_VERSION
-
-
-def get_package_version():
-    """Return the package version."""
-    return PACKAGE_VERSION
-
-
-def load(
-    path: str | list[str] | None = None,
-    string: str | list[str] | None = None,
-    dir: str | list[str] | None = None,
-    filter_query: str | None = None,
-    validate: bool = True,
-    strict: bool = False,
-    settings: FlexTagSettings | None = None,
-    recursive: bool = True,
-) -> FlexView:
-    """
-    Parse FlexTag data from files, strings, or directories.
-
-    Args:
-        path: File path(s) to FlexTag content
-        string: Raw FlexTag string content
-        dir: Directory path(s) containing FlexTag files (.flextag or .ft)
-        filter_query: Optional query to filter containers after loading
-        validate: Whether to validate against any embedded schema
-        strict: If True, every non-schema section must match at least one schema.
-                Unmatched sections raise SchemaValidationError. (default: False)
-        settings: Optional settings to control parsing behavior
-        recursive: Whether to recursively search subdirectories when using dir=
-                   (default: True)
-
-    Returns:
-        A FlexView object containing the parsed sections and containers
-
-    Raises:
-        FlexTagError: Base class for all FlexTag-related errors
-        FlexTagSyntaxError: If there is a syntax error in the FlexTag content
-        SchemaValidationError: If validation fails against the schema
-    """
-    return FlexTag.load(
-        path=path,
-        string=string,
-        dir=dir,
-        filter_query=filter_query,
-        validate=validate,
-        strict=strict,
-        settings=settings,
-        recursive=recursive,
-    )
-
-
-def filter(view: FlexView, query: str, target: str = "sections") -> FlexView:
-    """
-    Filter a FlexView by sections or containers using query syntax.
-
-    Args:
-        view: The FlexView to filter
-        query: Query string using FlexTag's filter syntax
-        target: Whether to filter "sections" or "containers"
-
-    Returns:
-        A new filtered FlexView containing only the matched elements
-    """
-    return view.filter(query, target)
-
-
-def configure_settings(**kwargs) -> FlexTagSettings:
-    """
-    Create a FlexTagSettings object with custom settings.
-
-    Args:
-        **kwargs: Settings to override (allow_directory_traversal,
-                 allow_remote_loading, max_section_size, etc.)
-
-    Returns:
-        A configured FlexTagSettings object for use with load()
-    """
-    settings = FlexTagSettings()
-    for key, value in kwargs.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
-    return settings
-
-
-# Make these available in the public API
-__all__ = [
-    "load",
-    "filter",
-    "configure_settings",
-    "FlexView",
-    "FlexTagSettings",
-    "FlexTagError",
-    "FlexTagSyntaxError",
-    "SchemaValidationError",
-    "SchemaTypeError",
-    "SchemaSectionError",
-    "logger",
-    "get_flextag_version",
-    "get_package_version",
-]
+__all__ = ["FileDoc", "FlexTagError", "Section", "View", "load", "load_file",
+           "FORMAT_VERSION", "__version__"]

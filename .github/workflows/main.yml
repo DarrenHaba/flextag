@@ -2,7 +2,7 @@ name: FlexTag CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "0.5" ]
   pull_request:
     branches: [ main ]
 
@@ -21,64 +21,32 @@ jobs:
             os: macos-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
+      - name: Install package and test dependencies
+        run: |
+          pip install .
+          pip install pytest ftml
 
-    - name: Cache Poetry virtualenv
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-        restore-keys: |
-          venv-${{ runner.os }}-py${{ matrix.python-version }}-
-
-    - name: Install dependencies
-      run: poetry install --no-interaction
-
-    - name: Install optional test dependencies
-      run: poetry run pip install ftml || true
-
-    - name: Run tests with coverage
-      run: poetry run pytest --cov=flextag --cov-report=xml -v
-
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
+      - name: Run tests
+        run: pytest -q
 
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-
-    - name: Install dependencies
-      run: poetry install --no-interaction
-
-    - name: Run black check
-      run: poetry run black --check src/ tests/
-
-    - name: Run flake8
-      run: poetry run flake8 src/ tests/ --max-line-length=88
+      - name: Ruff
+        run: |
+          pip install ruff
+          ruff check src/ tests/
